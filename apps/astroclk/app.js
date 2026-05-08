@@ -9,8 +9,6 @@
 //   Swipe left/right  → toggle F1 ↔ F2
 //   Long BTN1         → side menu
 
-"use strict";
-
 // ── Constants & defaults ──────────────────────────────────────────────────────
 var W = g.getWidth();    // 176
 var H = g.getHeight();   // 176
@@ -238,14 +236,14 @@ function drawF1() {
   y += 16;
 
   // Barometer trend + Zambretti
-  var trendStr  = zambretti.trend(pressBuf);
+  var trendStr  = zambretti ? zambretti.trend(pressBuf) : "steady";
   var trendIcon = trendStr === "rising" ? "\u2191" : trendStr === "falling" ? "\u2193" : "\u2192";
   var curPress  = pressBuf.length ? pressBuf[pressBuf.length - 1].p : null;
   var loc2      = require("Storage").readJSON("mylocation.json", 1) || {};
   var hemi      = (loc2.lat || 0) >= 0 ? "N" : "S";
 
   g.setFont("6x8", 1);
-  if (curPress) {
+  if (curPress && zambretti) {
     var forecast = zambretti.forecast(trendStr, curPress, hemi);
     g.setColor(pal(COLOR.accent));
     g.drawString(trendIcon + " " + forecast.forecast.slice(0, 14), lx, y);
@@ -325,8 +323,8 @@ function drawF1() {
 
   // BLE status
   g.setFontAlign(1, -1);
-  g.setColor(pal(NRF.getSecurityStatus ? COLOR.accent : COLOR.dim));
-  var bleConnected = NRF.getSecurityStatus && NRF.getSecurityStatus().connected;
+  var bleConnected = (typeof NRF !== "undefined") && NRF.getSecurityStatus && NRF.getSecurityStatus().connected;
+  g.setColor(pal(bleConnected ? COLOR.accent : COLOR.dim));
   g.drawString(bleConnected ? "BLE\u25cf" : "BLE\u25cb", W - 4, by);
 
   g.setFontAlign(-1, -1); // reset
