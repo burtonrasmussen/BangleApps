@@ -50,8 +50,11 @@ var COLOR = {
 };
 
 // ── Module references (hoisted — required once, not on every draw) ────────────
-var zambretti = require("Storage").eval("astroclk.zambretti.js");
-var SunCalc   = require("suncalc");
+// Wrapped in try/catch so a missing file shows an error screen instead of
+// a silent "Loading..." hang.
+var zambretti, SunCalc;
+try { zambretti = require("Storage").eval("astroclk.zambretti.js"); } catch(e) { zambretti = null; }
+try { SunCalc = require("suncalc"); } catch(e) { SunCalc = null; }
 
 // ── State ─────────────────────────────────────────────────────────────────────
 var screen = 1;          // 1 = F1, 2 = F2
@@ -132,6 +135,7 @@ function cloudColor(pct) {
 
 // ── Astronomical data (computed once per minute) ──────────────────────────────
 function refreshAstro() {
+  if (!SunCalc) return; // module not loaded — skip silently
   var now  = new Date();
   var min  = now.getMinutes() + now.getHours() * 60;
   if (min === lastAstroMin) return;
@@ -158,6 +162,16 @@ function refreshAstro() {
 // ── F1 — Main clock face ──────────────────────────────────────────────────────
 function drawF1() {
   var now = new Date();
+
+  // If suncalc didn't load, show a diagnostic screen instead of crashing
+  if (!SunCalc) {
+    g.reset(); g.clear();
+    g.setFont("6x8", 1); g.setColor("#FF4444");
+    g.setFontAlign(0, 0);
+    g.drawString("Missing: suncalc\nReinstall via\nApp Loader", W/2, H/2);
+    return;
+  }
+
   refreshAstro();
 
   var weather = require("Storage").readJSON("astroclk.weather.json", 1) || {};
