@@ -48,26 +48,37 @@
   }
 
   // ── 2. HRM polling ───────────────────────────────────────────────────────────
+  // Bangle.js 2 HRM is event-driven: power on, wait for a confident reading,
+  // then power off and schedule the next poll. Never left running continuously.
   var hrmBuf = [];   // RAM ring buffer: [{t, bpm}]
   var HRM_RAM_MAX = 288; // 24h at 5-min intervals
 
-  function startHRM() {
+  function doHrmPoll() {
     Bangle.setHRMPower(1, "astroclk");
-    setInterval(function() {
-      Bangle.getHealthStatus("astroclk").then ? undefined : undefined; // no-op; use direct read
-      Bangle.on("HRM-raw", undefined); // ensure listener cleared
-      // Use a one-shot read
-      var reading = Bangle.getHealthStatus ? Bangle.getHealthStatus() : null;
-      if (reading && reading.bpm > 0) {
-        var entry = { t: Math.floor(Date.now() / 1000), bpm: reading.bpm };
-        hrmBuf.push(entry);
-        if (hrmBuf.length > HRM_RAM_MAX) hrmBuf.shift();
-        // Expose latest BPM for the clock face to read
-        if (typeof global !== "undefined") global._astroclkBPM = reading.bpm;
-      }
-    }, HRM_INTERVAL_M * 60 * 1000);
+    // Hard timeout — give up after 30 s if no confident reading arrives
+    var hrmTimeout = setTimeout(function() {
+      Bangle.setHRMPower(0, "astroclk");
+      Bangle.removeListener("HRM", onHRM);
+    }, 30000);
 
-    // Flush to storage at most once per hour
+    function onHRM(hrm) {
+      if (!hrm.bpm || hrm.bpm <= 0 || hrm.confidence < 50) return;
+      clearTimeout(hrmTimeout);
+      Bangle.setHRMPower(0, "astroclk");
+      Bangle.removeListener("HRM", onHRM);
+      var entry = { t: Math.floor(Date.now() / 1000), bpm: hrm.bpm };
+      hrmBuf.push(entry);
+      if (hrmBuf.length > HRM_RAM_MAX) hrmBuf.shift();
+      global._astroclkBPM = hrm.bpm;
+    }
+    Bangle.on("HRM", onHRM);
+  }
+
+  function startHRM() {
+    doHrmPoll(); // first poll immediately on boot
+    setInterval(doHrmPoll, HRM_INTERVAL_M * 60 * 1000);
+
+    // Flush RAM buffer to flash at most once per hour
     setInterval(function() {
       if (hrmBuf.length === 0) return;
       require("Storage").writeJSON(HRM_FILE, hrmBuf);

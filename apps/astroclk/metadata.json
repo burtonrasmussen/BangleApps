@@ -14,7 +14,6 @@
     "mylocation": "app",
     "android": "app"
   },
-  "modules": ["suncalc"],
   "storage": [
     {"name": "astroclk.app.js",       "url": "app.js"},
     {"name": "astroclk.boot.js",      "url": "boot.js"},

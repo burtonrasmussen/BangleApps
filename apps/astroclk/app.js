@@ -49,6 +49,10 @@ var COLOR = {
   batt:     "#AAAAAA"
 };
 
+// ── Module references (hoisted — required once, not on every draw) ────────────
+var zambretti = require("Storage").eval("astroclk.zambretti.js");
+var SunCalc   = require("suncalc");
+
 // ── State ─────────────────────────────────────────────────────────────────────
 var screen = 1;          // 1 = F1, 2 = F2
 var clockInterval;
@@ -136,7 +140,6 @@ function refreshAstro() {
   var loc = require("Storage").readJSON("mylocation.json", 1) || { lat: 51.5, lon: -0.12 };
   var lat = loc.lat, lon = loc.lon;
 
-  var SunCalc = require("suncalc");
   var moonIll  = SunCalc.getMoonIllumination(now);
   var moonTimes = SunCalc.getMoonTimes(now, lat, lon);
   var sunTimes  = SunCalc.getTimes(now, lat, lon);
@@ -221,7 +224,6 @@ function drawF1() {
   y += 16;
 
   // Barometer trend + Zambretti
-  var zambretti = require("Storage").eval("astroclk.zambretti.js");
   var trendStr  = zambretti.trend(pressBuf);
   var trendIcon = trendStr === "rising" ? "\u2191" : trendStr === "falling" ? "\u2193" : "\u2192";
   var curPress  = pressBuf.length ? pressBuf[pressBuf.length - 1].p : null;
