@@ -34,17 +34,17 @@ function pal(hex) {
 }
 
 var COLOR = {
-  bg:       "#000000",
-  time:     "#FFFFFF",
-  label:    "#888888",
-  accent:   "#44AAFF",   // blue-ish
-  moon:     "#FFEE88",   // warm yellow
-  good:     "#55CC55",   // green — good sky
-  warn:     "#FFAA00",   // amber — partial cloud
-  bad:      "#CC4444",   // red — cloudy
-  dim:      "#555555",
-  iss:      "#AAFFAA",
-  batt:     "#AAAAAA"
+  bg:       "#FFFFFF",
+  time:     "#000000",
+  label:    "#555555",
+  accent:   "#0066AA",   // dark blue
+  moon:     "#AA8800",   // dark gold
+  good:     "#228822",   // dark green
+  warn:     "#BB6600",   // dark amber
+  bad:      "#AA2222",   // dark red
+  dim:      "#999999",
+  iss:      "#226622",
+  batt:     "#555555"
 };
 
 // ── Module references (hoisted — required once, not on every draw) ────────────
@@ -199,15 +199,6 @@ function drawF1() {
   g.drawString(DAYS[now.getDay()] + " " + now.getDate() + " " + MONTHS[now.getMonth()], lx, y);
   y += 20;
 
-  // BPM
-  g.setFont("6x8", 1);
-  g.setColor(pal(COLOR.label));
-  g.drawString("HRM", lx, y);
-  g.setColor(pal(COLOR.time));
-  var bpm = (typeof global !== "undefined" && global._astroclkBPM) ? global._astroclkBPM : "--";
-  g.drawString(" " + bpm + " bpm", lx + 18, y);
-  y += 12;
-
   // Steps
   g.setColor(pal(COLOR.label));
   g.drawString("STP", lx, y);
@@ -258,16 +249,14 @@ function drawF1() {
   var ry = 4;
 
   // Moon phase icon
-  drawMoonIcon(rx + 20, ry + 20, 18, astroCache.phase || 0);
+  drawMoonIcon(W - 28, ry + 20, 18, astroCache.phase || 0);
   ry += 44;
 
   // Illumination %
   g.setFont("6x8", 1);
   g.setColor(pal(COLOR.moon));
   g.setFontAlign(0, -1);
-  g.drawString(moonPhaseLabel(astroCache.phase || 0), rx + 20, ry);
-  ry += 10;
-  g.drawString((astroCache.illumination || 0) + "% lit", rx + 20, ry);
+  g.drawString((astroCache.illumination || 0) + "% lit", W - 28, ry);
   ry += 14;
 
   g.setFontAlign(-1, -1);
