@@ -465,9 +465,11 @@ setWatch(function() {
 // ── Clock tick ────────────────────────────────────────────────────────────────
 
 // Redraw every minute, aligned to the minute boundary
+// Align tick to the minute boundary then restart the interval
 var now = new Date();
 var msToNextMin = (60 - now.getSeconds()) * 1000 - now.getMilliseconds();
 setTimeout(function() {
+  if (clockInterval) { clearInterval(clockInterval); clockInterval = null; }
   startClock();
 }, msToNextMin);
 

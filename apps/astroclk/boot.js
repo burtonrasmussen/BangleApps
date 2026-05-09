@@ -18,67 +18,79 @@
   var PRES_MAX        = 12;                              // ring-buffer size (~3 h)
 
   // ── 1. GPS time sync ─────────────────────────────────────────────────────────
+  var gpsRunning = false;
+  var gpsListener = null;
+  var gpsStopTimer = null;
+
+  function stopGpsNow() {
+    if (!gpsRunning) return;
+    gpsRunning = false;
+    if (gpsStopTimer) { clearTimeout(gpsStopTimer); gpsStopTimer = null; }
+    if (gpsListener) { Bangle.removeListener("GPS", gpsListener); gpsListener = null; }
+    Bangle.setGPSPower(0, "astroclk");
+  }
+
   function maybeGpsSync() {
+    if (gpsRunning) return;
     var sync = require("Storage").readJSON(SYNC_FILE, 1) || {};
     var ageH = (Date.now() - (sync.lastGPSSync || 0)) / 3600000;
     if (ageH < GPS_INTERVAL_H) return;
 
-    var timeout = setTimeout(function() {
-      Bangle.setGPSPower(0, "astroclk");
-    }, 3 * 60 * 1000); // 3-minute hard stop
+    gpsRunning = true;
+    gpsStopTimer = setTimeout(function() {
+      stopGpsNow();
+    }, 3 * 60 * 1000);
 
     Bangle.setGPSPower(1, "astroclk");
-    Bangle.on("GPS", function onGPS(fix) {
+    gpsListener = function(fix) {
       if (!fix.fix) return;
-      // Valid fix: sync time and location
+      stopGpsNow();
       setTime(fix.time.getTime() / 1000);
-      clearTimeout(timeout);
-      Bangle.setGPSPower(0, "astroclk");
-      Bangle.removeListener("GPS", onGPS);
-
-      // Update mylocation.json
       var loc = require("Storage").readJSON("mylocation.json", 1) || {};
-      loc.lat = fix.lat;
-      loc.lon = fix.lon;
+      loc.lat = fix.lat; loc.lon = fix.lon;
       require("Storage").writeJSON("mylocation.json", loc);
-
-      // Record sync timestamp
       require("Storage").writeJSON(SYNC_FILE, { lastGPSSync: Date.now() });
-    });
+    };
+    Bangle.on("GPS", gpsListener);
   }
 
   // ── 2. HRM polling ───────────────────────────────────────────────────────────
-  // Bangle.js 2 HRM is event-driven: power on, wait for a confident reading,
-  // then power off and schedule the next poll. Never left running continuously.
-  var hrmBuf = [];   // RAM ring buffer: [{t, bpm}]
-  var HRM_RAM_MAX = 288; // 24h at 5-min intervals
+  var hrmBuf = [];
+  var HRM_RAM_MAX = 288;
+  var hrmActive = false;
+  var hrmStopTimer = null;
+  var hrmListener = null;
+
+  function stopHrmNow() {
+    if (!hrmActive) return;
+    hrmActive = false;
+    if (hrmStopTimer) { clearTimeout(hrmStopTimer); hrmStopTimer = null; }
+    if (hrmListener) { Bangle.removeListener("HRM", hrmListener); hrmListener = null; }
+    Bangle.setHRMPower(0, "astroclk");
+  }
 
   function doHrmPoll() {
+    if (hrmActive) return;
+    hrmActive = true;
     Bangle.setHRMPower(1, "astroclk");
-    // Hard timeout — give up after 30 s if no confident reading arrives
-    var hrmTimeout = setTimeout(function() {
-      Bangle.setHRMPower(0, "astroclk");
-      Bangle.removeListener("HRM", onHRM);
-    }, 30000);
-
-    function onHRM(hrm) {
+    hrmStopTimer = setTimeout(function() {
+      stopHrmNow();
+    }, 15000); // give up after 15 s
+    hrmListener = function(hrm) {
       if (!hrm.bpm || hrm.bpm <= 0 || hrm.confidence < 50) return;
-      clearTimeout(hrmTimeout);
-      Bangle.setHRMPower(0, "astroclk");
-      Bangle.removeListener("HRM", onHRM);
-      var entry = { t: Math.floor(Date.now() / 1000), bpm: hrm.bpm };
+      var bpm = hrm.bpm;
+      stopHrmNow();
+      var entry = { t: Math.floor(Date.now() / 1000), bpm: bpm };
       hrmBuf.push(entry);
       if (hrmBuf.length > HRM_RAM_MAX) hrmBuf.shift();
-      global._astroclkBPM = hrm.bpm;
-    }
-    Bangle.on("HRM", onHRM);
+      global._astroclkBPM = bpm;
+    };
+    Bangle.on("HRM", hrmListener);
   }
 
   function startHRM() {
-    doHrmPoll(); // first poll immediately on boot
+    setTimeout(doHrmPoll, 60000); // first poll 60 s after boot — let GPS settle
     setInterval(doHrmPoll, HRM_INTERVAL_M * 60 * 1000);
-
-    // Flush RAM buffer to flash at most once per hour
     setInterval(function() {
       if (hrmBuf.length === 0) return;
       require("Storage").writeJSON(HRM_FILE, hrmBuf);
@@ -87,7 +99,9 @@
 
   // ── 3. Barometer pressure sampling ───────────────────────────────────────────
   function samplePressure() {
-    Bangle.getPressure().then(function(d) {
+    var p = (typeof Bangle.getPressure === "function") ? Bangle.getPressure() : null;
+    if (!p || typeof p.then !== "function") return;
+    p.then(function(d) {
       if (!d || !d.pressure) return;
       var buf = require("Storage").readJSON(PRESSURE_FILE, 1) || [];
       buf.push({ t: Math.floor(Date.now() / 1000), p: d.pressure });
@@ -106,15 +120,30 @@
   }
 
   // ── Boot sequence ─────────────────────────────────────────────────────────────
+  // Stop background sensors the moment the frontlight wakes (user interaction).
+  // Resume 30 s after the display goes off again — no interference with the user.
+  var displayOffTimer = null;
+  Bangle.on("lcdPower", function(on) {
+    if (on) {
+      stopHrmNow();
+      stopGpsNow();
+      if (displayOffTimer) { clearTimeout(displayOffTimer); displayOffTimer = null; }
+    } else {
+      displayOffTimer = setTimeout(function() {
+        displayOffTimer = null;
+        doHrmPoll();
+        maybeGpsSync();
+      }, 30000);
+    }
+  });
+
   maybeGpsSync();
   startHRM();
   samplePressure();
   setInterval(samplePressure, PRES_INTERVAL_M * 60 * 1000);
 
-  // Try weather fetch when BLE connects (Gadgetbridge available)
   NRF.on("connect", function() {
-    setTimeout(tryFetch, 3000); // brief delay to let android.boot.js finish setup
+    setTimeout(tryFetch, 3000);
   });
-  // Also try immediately in case already connected
   setTimeout(tryFetch, 5000);
 })();
