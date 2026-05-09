@@ -237,6 +237,7 @@ function drawF1() {
   g.setFont("VGA16");
 
   // Row 1: DARK | R (moon rise)
+  // VGA16 = 8px/char; right-col values drawn left-aligned right after their label
   g.setColor(pal(COLOR.label));
   g.drawString("DARK", lx, y);
   g.setColor(pal(COLOR.accent));
@@ -246,9 +247,7 @@ function drawF1() {
   g.setColor(pal(COLOR.label));
   g.drawString("R", rcx, y);
   g.setColor(pal(COLOR.time));
-  g.setFontAlign(1, -1);
-  g.drawString(fmtTimeFromDate(astroCache.moonRise), rvx, y);
-  g.setFontAlign(-1, -1);
+  g.drawString(fmtTimeFromDate(astroCache.moonRise), rcx + 16, y);
   y += 16;
 
   // Row 2: LITE | S (moon set)
@@ -261,9 +260,7 @@ function drawF1() {
   g.setColor(pal(COLOR.label));
   g.drawString("S", rcx, y);
   g.setColor(pal(COLOR.time));
-  g.setFontAlign(1, -1);
-  g.drawString(fmtTimeFromDate(astroCache.moonSet), rvx, y);
-  g.setFontAlign(-1, -1);
+  g.drawString(fmtTimeFromDate(astroCache.moonSet), rcx + 16, y);
   y += 16;
 
   // Row 3: ISS | SKY
@@ -289,14 +286,10 @@ function drawF1() {
     var cAge = weather.fetchedAt ? Math.round((Date.now() - weather.fetchedAt) / 3600000) : null;
     var stale = cAge !== null && cAge > 12;
     g.setColor(pal(cloudColor(cloud)));
-    g.setFontAlign(1, -1);
-    g.drawString(cloud + "%" + (stale ? "*" : ""), rvx, y);
-    g.setFontAlign(-1, -1);
+    g.drawString(cloud + "%" + (stale ? "*" : ""), rcx + 32, y);
   } else {
     g.setColor(pal(COLOR.dim));
-    g.setFontAlign(1, -1);
-    g.drawString("--", rvx, y);
-    g.setFontAlign(-1, -1);
+    g.drawString("--", rcx + 32, y);
   }
 
   // ── Bottom bar ────────────────────────────────────────────────────────────
