@@ -328,7 +328,6 @@ function drawF1() {
   g.drawString(bleConnected ? "BLE\u25cf" : "BLE\u25cb", W - 4, by);
 
   g.setFontAlign(-1, -1); // reset
-  Bangle.drawWidgets();
 }
 
 // ── F2 — Hourly sky conditions table ─────────────────────────────────────────
@@ -359,7 +358,6 @@ function drawF2() {
     g.setColor(pal(COLOR.label));
     g.setFontAlign(0, 0);
     g.drawString("No data\nFetch via BLE", W / 2, H / 2);
-    Bangle.drawWidgets();
     return;
   }
 
@@ -411,8 +409,6 @@ function drawF2() {
   } else {
     g.drawString("no data cached", W / 2, by);
   }
-
-  Bangle.drawWidgets();
 }
 
 // ── Navigation ────────────────────────────────────────────────────────────────
@@ -489,7 +485,6 @@ setWatch(function() {
 }, BTN1, { repeat: true, edge: "falling", debounce: 50 });
 
 // ── Clock tick ────────────────────────────────────────────────────────────────
-Bangle.loadWidgets();
 
 // Redraw every minute, aligned to the minute boundary
 var now = new Date();
