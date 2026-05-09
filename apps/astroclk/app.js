@@ -421,26 +421,45 @@ function draw() {
   else              drawF2();
 }
 
-Bangle.on("swipe", function(dir) {
-  // dir: -1 = right-to-left (next), 1 = left-to-right (prev)
+// Named so it can be removed while the menu is open
+function onSwipe(dir) {
   screen = screen === 1 ? 2 : 1;
   draw();
-});
+}
+
+var inMenu = false;
+var menuRef = null;
 
 // Long-press BTN1 → side menu
+function stopClock() {
+  if (clockInterval) { clearInterval(clockInterval); clockInterval = null; }
+  Bangle.removeListener("swipe", onSwipe);
+}
+function startClock() {
+  inMenu = false;
+  if (menuRef) { E.showMenu(); menuRef = null; }
+  if (clockInterval) return; // already running
+  Bangle.on("swipe", onSwipe);
+  draw();
+  clockInterval = setInterval(draw, 60000);
+}
+
 setWatch(function() {
-  E.showMenu({
-    "": { title: "AstroWatch" },
-    "< Back":        function() { draw(); },
+  if (inMenu) return; // ignore if menu already open
+  inMenu = true;
+  stopClock();
+  menuRef = E.showMenu({
+    "": { title: "AstroWatch", back: startClock },
+    "< Back":        function() { startClock(); },
     "Fetch Weather": function() {
       if (typeof Bangle.http !== "function") {
-        E.showAlert("Gadgetbridge\nnot connected").then(draw);
+        E.showAlert("Gadgetbridge\nnot connected").then(startClock);
         return;
       }
       E.showMessage("Fetching...");
       require("Storage").eval("astroclk.fetch.js").fetch(
-        function() { E.showAlert("Done!").then(draw); },
-        function(e) { E.showAlert("Error:\n" + e).then(draw); }
+        function() { E.showAlert("Done!").then(startClock); },
+        function(e) { E.showAlert("Error:\n" + e).then(startClock); }
       );
     },
     "Red Mode": {
@@ -466,8 +485,8 @@ setWatch(function() {
         require("Storage").writeJSON(SETTINGS_FILE, settings);
       }
     }
-  });
-}, BTN1, { repeat: false, edge: "falling", debounce: 50 });
+});
+}, BTN1, { repeat: true, edge: "falling", debounce: 50 });
 
 // ── Clock tick ────────────────────────────────────────────────────────────────
 Bangle.loadWidgets();
@@ -476,9 +495,8 @@ Bangle.loadWidgets();
 var now = new Date();
 var msToNextMin = (60 - now.getSeconds()) * 1000 - now.getMilliseconds();
 setTimeout(function() {
-  draw();
-  clockInterval = setInterval(draw, 60000);
+  startClock();
 }, msToNextMin);
 
-// Initial draw immediately
-draw();
+// Initial draw — startClock registers the swipe listener and starts the interval
+startClock();
