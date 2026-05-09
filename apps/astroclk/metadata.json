@@ -12,7 +12,8 @@
   "readme": "README.md",
   "dependencies": {
     "mylocation": "app",
-    "android": "app"
+    "android": "app",
+    "FontVGA16": "module"
   },
   "storage": [
     {"name": "astroclk.app.js",       "url": "app.js"},

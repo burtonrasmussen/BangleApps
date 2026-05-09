@@ -37,14 +37,14 @@ var COLOR = {
   bg:       "#FFFFFF",
   time:     "#000000",
   label:    "#555555",
-  accent:   "#0066AA",   // dark blue
-  moon:     "#AA8800",   // dark gold
-  good:     "#228822",   // dark green
-  warn:     "#BB6600",   // dark amber
-  bad:      "#AA2222",   // dark red
+  accent:   "#000000",
+  moon:     "#000000",
+  good:     "#228822",
+  warn:     "#BB6600",
+  bad:      "#AA2222",
   dim:      "#999999",
-  iss:      "#226622",
-  batt:     "#555555"
+  iss:      "#000000",
+  batt:     "#000000"
 };
 
 // ── Module references (hoisted — required once, not on every draw) ────────────
@@ -53,6 +53,7 @@ var COLOR = {
 var zambretti, SunCalc;
 try { zambretti = require("Storage").eval("astroclk.zambretti.js"); } catch(e) { zambretti = null; }
 try { SunCalc = require("suncalc"); } catch(e) { SunCalc = null; }
+try { require("FontVGA16").add(Graphics); } catch(e) {}
 
 // ── State ─────────────────────────────────────────────────────────────────────
 var screen = 1;          // 1 = F1, 2 = F2
@@ -95,30 +96,34 @@ function moonPhaseLabel(phase) {
 
 // Draw a small moon icon at (cx, cy) radius r, phase 0–1
 // White = lit, black = dark, black outline
+// Uses row-by-row scan with correct terminator ellipse — no clipping artifacts.
 function drawMoonIcon(cx, cy, r, phase) {
-  var lit = phase <= 0.5 ? phase * 2 : (1 - phase) * 2;
+  // cos(phase * 2π): +1=new, 0=quarter, -1=full, 0=quarter, +1=new
+  var cosP = Math.cos(phase * 2 * Math.PI);
   var waning = phase > 0.5;
-  var sx = Math.round(r * (1 - lit));
 
-  if (phase < 0.03 || phase > 0.97) {
-    // New moon: solid black disc
-    g.setColor("#000000");
-    g.fillCircle(cx, cy, r);
-  } else {
-    // White lit base
-    g.setColor("#FFFFFF");
-    g.fillCircle(cx, cy, r);
-    // Black shadow ellipse covering unlit portion
-    if (sx > 0) {
-      g.setColor("#000000");
-      if (!waning) {
-        g.fillEllipse(cx - r, cy - r, cx + sx - r, cy + r);
-      } else {
-        g.fillEllipse(cx + r - sx, cy - r, cx + r, cy + r);
-      }
+  for (var dy = -r; dy <= r; dy++) {
+    var halfW = Math.round(Math.sqrt(r * r - dy * dy));
+    // Terminator x offset at this row (ellipse with same vertical radius as circle)
+    var tx = Math.round(cosP * halfW);
+    var y = cy + dy;
+    var litL, litR, dkL, dkR;
+
+    if (!waning) {
+      // Waxing: lit side is right (x >= center+tx)
+      litL = Math.max(cx - halfW, cx + tx);
+      litR = cx + halfW;
+      dkL = cx - halfW; dkR = litL - 1;
+    } else {
+      // Waning: lit side is left (x <= center-tx)
+      litL = cx - halfW;
+      litR = Math.min(cx + halfW, cx - tx);
+      dkL = litR + 1; dkR = cx + halfW;
     }
+
+    if (dkL <= dkR) { g.setColor("#000000"); g.fillRect(dkL, y, dkR, y); }
+    if (litL <= litR) { g.setColor("#FFFFFF"); g.fillRect(litL, y, litR, y); }
   }
-  // Black outline
   g.setColor("#000000");
   g.drawCircle(cx, cy, r);
 }
@@ -164,7 +169,7 @@ function drawF1() {
   // If suncalc didn't load, show a diagnostic screen instead of crashing
   if (!SunCalc) {
     g.reset(); g.clear();
-    g.setFont("6x8", 1); g.setColor("#FF4444");
+    g.setFont("VGA16"); g.setColor("#FF4444");
     g.setFontAlign(0, 0);
     g.drawString("Missing: suncalc\nReinstall via\nApp Loader", W/2, H/2);
     return;
@@ -194,18 +199,18 @@ function drawF1() {
   // Date
   var DAYS  = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
   var MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-  g.setFont("12x20", 1);
+  g.setFont("VGA16");
   g.setColor(pal(COLOR.label));
   g.drawString(DAYS[now.getDay()] + " " + now.getDate() + " " + MONTHS[now.getMonth()], lx, y);
-  y += 24;
+  y += 18;
 
   // Steps
   g.setColor(pal(COLOR.label));
   g.drawString("STP", lx, y);
   g.setColor(pal(COLOR.time));
   var steps = Bangle.getHealthStatus ? (Bangle.getHealthStatus().steps || 0) : 0;
-  g.drawString(" " + steps, lx + 18, y);
-  y += 12;
+  g.drawString(" " + steps, lx + 32, y);
+  y += 18;
 
   // Divider
   g.setColor(pal(COLOR.dim));
@@ -213,36 +218,36 @@ function drawF1() {
   y += 8;
 
   // Astro dusk / dawn
-  g.setFont("6x8", 1);
+  g.setFont("VGA16");
   g.setColor(pal(COLOR.label));
   g.drawString("DUSK", lx, y);
   g.setColor(pal(COLOR.accent));
-  g.drawString(" " + fmtTimeFromDate(astroCache.astroDusk), lx + 24, y);
-  y += 12;
+  g.drawString(" " + fmtTimeFromDate(astroCache.astroDusk), lx + 40, y);
+  y += 18;
 
   g.setColor(pal(COLOR.label));
   g.drawString("DAWN", lx, y);
   g.setColor(pal(COLOR.accent));
-  g.drawString(" " + fmtTimeFromDate(astroCache.astroDawn), lx + 24, y);
-  y += 16;
+  g.drawString(" " + fmtTimeFromDate(astroCache.astroDawn), lx + 40, y);
+  y += 18;
 
   // Barometer trend + Zambretti
   var trendStr  = zambretti ? zambretti.trend(pressBuf) : "steady";
-  var trendIcon = trendStr === "rising" ? "\u2191" : trendStr === "falling" ? "\u2193" : "\u2192";
+  var trendIcon = trendStr === "rising" ? "^" : trendStr === "falling" ? "v" : "-";
   var curPress  = pressBuf.length ? pressBuf[pressBuf.length - 1].p : null;
   var loc2      = require("Storage").readJSON("mylocation.json", 1) || {};
   var hemi      = (loc2.lat || 0) >= 0 ? "N" : "S";
 
-  g.setFont("6x8", 1);
+  g.setFont("VGA16");
   if (curPress && zambretti) {
     var forecast = zambretti.forecast(trendStr, curPress, hemi);
     g.setColor(pal(COLOR.accent));
-    g.drawString(trendIcon + " " + forecast.forecast.slice(0, 14), lx, y);
+    g.drawString(trendIcon + " " + forecast.forecast.slice(0, 8), lx, y);
   } else {
     g.setColor(pal(COLOR.dim));
     g.drawString("-- hPa", lx, y);
   }
-  y += 12;
+  y += 18;
 
   // ── Right column ──────────────────────────────────────────────────────────
   var rx = Math.floor(W / 2) + 4;
@@ -253,20 +258,20 @@ function drawF1() {
   ry += 44;
 
   // Illumination %
-  g.setFont("6x8", 1);
+  g.setFont("VGA16");
   g.setColor(pal(COLOR.moon));
   g.setFontAlign(0, -1);
-  g.drawString((astroCache.illumination || 0) + "% lit", W - 28, ry);
-  ry += 14;
+  g.drawString((astroCache.illumination || 0) + "%", W - 28, ry);
+  ry += 18;
 
   g.setFontAlign(-1, -1);
 
   // Moon rise / set
   g.setColor(pal(COLOR.label));
-  g.drawString("\u25b2" + fmtTimeFromDate(astroCache.moonRise), rx, ry);
-  ry += 12;
-  g.drawString("\u25bc" + fmtTimeFromDate(astroCache.moonSet), rx, ry);
-  ry += 14;
+  g.drawString("R " + fmtTimeFromDate(astroCache.moonRise), rx, ry);
+  ry += 18;
+  g.drawString("S " + fmtTimeFromDate(astroCache.moonSet), rx, ry);
+  ry += 18;
 
   // Cloud at dusk
   var cloud = weather.cloudAtDusk;
@@ -276,12 +281,12 @@ function drawF1() {
     var cAge = weather.fetchedAt ? Math.round((Date.now() - weather.fetchedAt) / 3600000) : null;
     var stale = cAge !== null && cAge > 12;
     g.setColor(pal(cloudColor(cloud)));
-    g.drawString(" " + cloud + "%" + (stale ? "*" : ""), rx + 18, ry);
+    g.drawString(" " + cloud + "%" + (stale ? "*" : ""), rx + 32, ry);
   } else {
     g.setColor(pal(COLOR.dim));
-    g.drawString(" --", rx + 18, ry);
+    g.drawString(" --", rx + 32, ry);
   }
-  ry += 12;
+  ry += 18;
 
   // ISS pass
   var iss = weather.iss;
@@ -290,22 +295,22 @@ function drawF1() {
   if (iss) {
     var issDate = new Date(iss.risetime * 1000);
     g.setColor(pal(COLOR.iss));
-    g.drawString(" " + fmtTimeFromDate(issDate), rx + 18, ry);
+    g.drawString(" " + fmtTimeFromDate(issDate), rx + 32, ry);
   } else {
     g.setColor(pal(COLOR.dim));
-    g.drawString(" none", rx + 18, ry);
+    g.drawString(" none", rx + 32, ry);
   }
-  ry += 14;
+  ry += 18;
 
   // ── Bottom bar ────────────────────────────────────────────────────────────
-  var by = H - 14;
+  var by = H - 18;
   g.setColor(pal(COLOR.dim));
   g.drawLine(0, by - 2, W, by - 2);
 
   // Battery
   var bat = E.getBattery();
   var batColor = bat > 30 ? COLOR.good : bat > 15 ? COLOR.warn : COLOR.bad;
-  g.setFont("6x8", 1);
+  g.setFont("VGA16");
   g.setColor(pal(batColor));
   g.setFontAlign(-1, -1);
   g.drawString("BAT " + bat + "%", 4, by);
@@ -314,7 +319,7 @@ function drawF1() {
   g.setFontAlign(1, -1);
   var bleConnected = (typeof NRF !== "undefined") && NRF.getSecurityStatus && NRF.getSecurityStatus().connected;
   g.setColor(pal(bleConnected ? COLOR.accent : COLOR.dim));
-  g.drawString(bleConnected ? "BLE\u25cf" : "BLE\u25cb", W - 4, by);
+  g.drawString(bleConnected ? "BLE+" : "BLE-", W - 4, by);
 
   g.setFontAlign(-1, -1); // reset
 }
@@ -329,7 +334,7 @@ function drawF2() {
   g.fillRect(0, 0, W, H);
 
   // Header
-  g.setFont("12x20", 1);
+  g.setFont("VGA16");
   g.setColor(pal(COLOR.accent));
   g.setFontAlign(0, -1);
   g.drawString("TONIGHT", W / 2, 2);
@@ -337,13 +342,13 @@ function drawF2() {
   g.setFont("6x8", 1);
   g.setColor(pal(COLOR.label));
   g.setFontAlign(-1, -1);
-  var hdrY = 24;
+  var hdrY = 22;
   g.drawString("TIME  CLD  WND  PCPN  HUM", 4, hdrY);
   g.setColor(pal(COLOR.dim));
   g.drawLine(0, hdrY + 9, W, hdrY + 9);
 
   if (hourly.length === 0) {
-    g.setFont("6x8", 1);
+    g.setFont("VGA16");
     g.setColor(pal(COLOR.label));
     g.setFontAlign(0, 0);
     g.drawString("No data\nFetch via BLE", W / 2, H / 2);
