@@ -94,32 +94,32 @@ function moonPhaseLabel(phase) {
 }
 
 // Draw a small moon icon at (cx, cy) radius r, phase 0–1
+// White = lit, black = dark, black outline
 function drawMoonIcon(cx, cy, r, phase) {
-  // Full circle first
-  g.setColor(pal(COLOR.moon));
-  g.fillCircle(cx, cy, r);
-
-  // Shadow: dark arc to represent phase
-  // phase 0=new(all dark), 0.5=full(all lit)
-  // We approximate with a filled dark ellipse on left or right half
-  g.setColor(pal(COLOR.bg));
-  var lit = phase <= 0.5 ? phase * 2 : (1 - phase) * 2; // 0–1 lit fraction
+  var lit = phase <= 0.5 ? phase * 2 : (1 - phase) * 2;
   var waning = phase > 0.5;
-
-  // Shadow ellipse x-radius: goes from r (new) → 0 (full) → r (new again)
   var sx = Math.round(r * (1 - lit));
-  if (sx > 0) {
-    // Draw shadow as filled ellipse on the appropriate half
-    if (!waning) {
-      // Waxing: shadow on left half
-      g.fillEllipse(cx - r, cy - r, cx + sx - r, cy + r);
-    } else {
-      // Waning: shadow on right half
-      g.fillEllipse(cx + r - sx, cy - r, cx + r, cy + r);
+
+  if (phase < 0.03 || phase > 0.97) {
+    // New moon: solid black disc
+    g.setColor("#000000");
+    g.fillCircle(cx, cy, r);
+  } else {
+    // White lit base
+    g.setColor("#FFFFFF");
+    g.fillCircle(cx, cy, r);
+    // Black shadow ellipse covering unlit portion
+    if (sx > 0) {
+      g.setColor("#000000");
+      if (!waning) {
+        g.fillEllipse(cx - r, cy - r, cx + sx - r, cy + r);
+      } else {
+        g.fillEllipse(cx + r - sx, cy - r, cx + r, cy + r);
+      }
     }
   }
-  // Thin border
-  g.setColor(pal(COLOR.dim));
+  // Black outline
+  g.setColor("#000000");
   g.drawCircle(cx, cy, r);
 }
 
@@ -194,10 +194,10 @@ function drawF1() {
   // Date
   var DAYS  = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
   var MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-  g.setFont("6x8", 2);
+  g.setFont("12x20", 1);
   g.setColor(pal(COLOR.label));
   g.drawString(DAYS[now.getDay()] + " " + now.getDate() + " " + MONTHS[now.getMonth()], lx, y);
-  y += 20;
+  y += 24;
 
   // Steps
   g.setColor(pal(COLOR.label));
@@ -329,7 +329,7 @@ function drawF2() {
   g.fillRect(0, 0, W, H);
 
   // Header
-  g.setFont("6x8", 2);
+  g.setFont("12x20", 1);
   g.setColor(pal(COLOR.accent));
   g.setFontAlign(0, -1);
   g.drawString("TONIGHT", W / 2, 2);
@@ -337,7 +337,7 @@ function drawF2() {
   g.setFont("6x8", 1);
   g.setColor(pal(COLOR.label));
   g.setFontAlign(-1, -1);
-  var hdrY = 20;
+  var hdrY = 24;
   g.drawString("TIME  CLD  WND  PCPN  HUM", 4, hdrY);
   g.setColor(pal(COLOR.dim));
   g.drawLine(0, hdrY + 9, W, hdrY + 9);
