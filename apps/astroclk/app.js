@@ -178,7 +178,6 @@ function drawF1() {
   refreshAstro();
 
   var weather = require("Storage").readJSON("astroclk.weather.json", 1) || {};
-  var pressBuf = require("Storage").readJSON("astroclk.pressure.json", 1) || [];
 
   // Background
   g.reset();
@@ -217,40 +216,22 @@ function drawF1() {
   g.drawLine(lx, y + 2, W / 2 - 4, y + 2);
   y += 8;
 
-  // Astro dusk / dawn
+  // Astronomical night window (dark = astro dusk, lite = astro dawn next morning)
   g.setFont("VGA16");
   g.setColor(pal(COLOR.label));
-  g.drawString("DUSK", lx, y);
+  g.drawString("DARK", lx, y);
   g.setColor(pal(COLOR.accent));
   g.drawString(" " + fmtTimeFromDate(astroCache.astroDusk), lx + 40, y);
   y += 18;
 
   g.setColor(pal(COLOR.label));
-  g.drawString("DAWN", lx, y);
+  g.drawString("LITE", lx, y);
   g.setColor(pal(COLOR.accent));
   g.drawString(" " + fmtTimeFromDate(astroCache.astroDawn), lx + 40, y);
   y += 18;
 
-  // Barometer trend + Zambretti
-  var trendStr  = zambretti ? zambretti.trend(pressBuf) : "steady";
-  var trendIcon = trendStr === "rising" ? "^" : trendStr === "falling" ? "v" : "-";
-  var curPress  = pressBuf.length ? pressBuf[pressBuf.length - 1].p : null;
-  var loc2      = require("Storage").readJSON("mylocation.json", 1) || {};
-  var hemi      = (loc2.lat || 0) >= 0 ? "N" : "S";
-
-  g.setFont("VGA16");
-  if (curPress && zambretti) {
-    var forecast = zambretti.forecast(trendStr, curPress, hemi);
-    g.setColor(pal(COLOR.accent));
-    g.drawString(trendIcon + " " + forecast.forecast.slice(0, 8), lx, y);
-  } else {
-    g.setColor(pal(COLOR.dim));
-    g.drawString("-- hPa", lx, y);
-  }
-  y += 18;
-
   // ── Right column ──────────────────────────────────────────────────────────
-  var rx = Math.floor(W / 2) + 4;
+  var rx = Math.floor(W / 2) + 16;
   var ry = 4;
 
   // Moon phase icon
@@ -281,10 +262,10 @@ function drawF1() {
     var cAge = weather.fetchedAt ? Math.round((Date.now() - weather.fetchedAt) / 3600000) : null;
     var stale = cAge !== null && cAge > 12;
     g.setColor(pal(cloudColor(cloud)));
-    g.drawString(" " + cloud + "%" + (stale ? "*" : ""), rx + 32, ry);
+    g.drawString(" " + cloud + "%" + (stale ? "*" : ""), rx + 24, ry);
   } else {
     g.setColor(pal(COLOR.dim));
-    g.drawString(" --", rx + 32, ry);
+    g.drawString(" --", rx + 24, ry);
   }
   ry += 18;
 
@@ -295,10 +276,10 @@ function drawF1() {
   if (iss) {
     var issDate = new Date(iss.risetime * 1000);
     g.setColor(pal(COLOR.iss));
-    g.drawString(" " + fmtTimeFromDate(issDate), rx + 32, ry);
+    g.drawString(" " + fmtTimeFromDate(issDate), rx + 24, ry);
   } else {
     g.setColor(pal(COLOR.dim));
-    g.drawString(" none", rx + 32, ry);
+    g.drawString(" none", rx + 24, ry);
   }
   ry += 18;
 
@@ -314,12 +295,6 @@ function drawF1() {
   g.setColor(pal(batColor));
   g.setFontAlign(-1, -1);
   g.drawString("BAT " + bat + "%", 4, by);
-
-  // BLE status
-  g.setFontAlign(1, -1);
-  var bleConnected = (typeof NRF !== "undefined") && NRF.getSecurityStatus && NRF.getSecurityStatus().connected;
-  g.setColor(pal(bleConnected ? COLOR.accent : COLOR.dim));
-  g.drawString(bleConnected ? "BLE+" : "BLE-", W - 4, by);
 
   g.setFontAlign(-1, -1); // reset
 }
