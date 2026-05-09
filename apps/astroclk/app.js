@@ -53,6 +53,7 @@ var COLOR = {
 var zambretti, SunCalc;
 try { zambretti = require("Storage").eval("astroclk.zambretti.js"); } catch(e) { zambretti = null; }
 try { SunCalc = require("suncalc"); } catch(e) { SunCalc = null; }
+try { require("FontVGA16").add(Graphics); } catch(e) {}
 
 
 // ── State ─────────────────────────────────────────────────────────────────────
@@ -169,7 +170,7 @@ function drawF1() {
   // If suncalc didn't load, show a diagnostic screen instead of crashing
   if (!SunCalc) {
     g.reset(); g.clear();
-    g.setFont("6x8", 2); g.setColor("#FF4444");
+    g.setFont("VGA16"); g.setColor("#FF4444");
     g.setFontAlign(0, 0);
     g.drawString("Missing: suncalc\nReinstall via\nApp Loader", W/2, H/2);
     return;
@@ -203,7 +204,7 @@ function drawF1() {
   // Date (left) + illumination % (right)
   var DAYS  = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
   var MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-  g.setFont("6x8", 2);
+  g.setFont("VGA16");
   g.setColor(pal(COLOR.label));
   g.drawString(DAYS[now.getDay()] + " " + now.getDate() + " " + MONTHS[now.getMonth()], lx, y);
   g.setColor(pal(COLOR.moon));
@@ -218,7 +219,7 @@ function drawF1() {
   y += 8;
 
   // Full-width rows: label left, value right-aligned to screen edge
-  g.setFont("6x8", 2);
+  g.setFont("VGA16");
 
   // DARK (astronomical dusk)
   g.setColor(pal(COLOR.label));
@@ -295,7 +296,7 @@ function drawF1() {
   // Battery
   var bat = E.getBattery();
   var batColor = bat > 30 ? COLOR.good : bat > 15 ? COLOR.warn : COLOR.bad;
-  g.setFont("6x8", 2);
+  g.setFont("VGA16");
   g.setColor(pal(batColor));
   g.setFontAlign(-1, -1);
   g.drawString("BAT " + bat + "%", 4, by);
@@ -313,7 +314,7 @@ function drawF2() {
   g.fillRect(0, 0, W, H);
 
   // Header
-  g.setFont("6x8", 2);
+  g.setFont("VGA16");
   g.setColor(pal(COLOR.accent));
   g.setFontAlign(0, -1);
   g.drawString("TONIGHT", W / 2, 2);
@@ -327,7 +328,7 @@ function drawF2() {
   g.drawLine(0, hdrY + 9, W, hdrY + 9);
 
   if (hourly.length === 0) {
-    g.setFont("6x8", 2);
+    g.setFont("VGA16");
     g.setColor(pal(COLOR.label));
     g.setFontAlign(0, 0);
     g.drawString("No data\nFetch via BLE", W / 2, H / 2);

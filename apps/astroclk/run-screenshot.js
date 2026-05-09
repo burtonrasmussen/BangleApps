@@ -24,6 +24,7 @@ function buildUploadCommands() {
     cmds += storageWrite(storageName, fs.readFileSync(path.join(APP_DIR, localFile), "utf8"));
   }
   cmds += storageWrite("suncalc", fs.readFileSync(path.join(BASE_DIR, "modules/suncalc.js"), "utf8"));
+  cmds += storageWrite("FontVGA16", fs.readFileSync(path.join(APP_DIR, "FontVGA16.js"), "utf8"));
   cmds += 'require("Storage").writeJSON("mylocation.json", {"lat":45.52,"lon":-122.68,"alt":50,"accuracy":5});\n';
   const now = Date.now();
   const weather = '{"fetchedAt":' + now + ',"cloudAtDusk":25,"iss":{"risetime":' + (Math.floor(now/1000)+3600) + ',"duration":360},"hourly":[{"hour":21,"cloud":20,"wind":5,"precip":0,"humidity":55},{"hour":22,"cloud":30,"wind":6,"precip":0,"humidity":58},{"hour":23,"cloud":15,"wind":4,"precip":0,"humidity":52},{"hour":0,"cloud":10,"wind":3,"precip":0,"humidity":50}]}';
