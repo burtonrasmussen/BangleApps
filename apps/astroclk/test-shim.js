@@ -40,6 +40,7 @@ const sandbox = {
     reset:        () => {},
     clear:        () => {},
     setColor:     () => {},
+    setBgColor:   () => {},
     fillRect:     () => {},
     setFont:      () => {},
     setFontAlign: () => {},

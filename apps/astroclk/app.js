@@ -181,6 +181,7 @@ function drawF1() {
 
   // Background
   g.reset();
+  g.setBgColor(pal(COLOR.bg));
   g.setColor(pal(COLOR.bg));
   g.fillRect(0, 0, W, H);
 
@@ -203,36 +204,48 @@ function drawF1() {
   g.drawString(DAYS[now.getDay()] + " " + now.getDate() + " " + MONTHS[now.getMonth()], lx, y);
   y += 20;
 
-  // Steps
-  g.setFont("Vector", 16);
-  g.setColor(pal(COLOR.label));
-  g.drawString("STP", lx, y);
-  g.setColor(pal(COLOR.time));
-  var steps = Bangle.getHealthStatus ? (Bangle.getHealthStatus().steps || 0) : 0;
-  g.drawString(steps, lx + g.stringWidth("STP "), y);
-  y += 20;
-
   // Divider
   g.setColor(pal(COLOR.dim));
   g.drawLine(lx, y + 2, W / 2 - 4, y + 2);
   y += 8;
 
-  // Astronomical night window
+  // Astronomical night window — label left, value right-aligned to column edge
   g.setFont("Vector", 16);
+  var midX = Math.floor(W / 2);
   g.setColor(pal(COLOR.label));
   g.drawString("DARK", lx, y);
   g.setColor(pal(COLOR.accent));
-  g.drawString(fmtTimeFromDate(astroCache.astroDusk), lx + g.stringWidth("DARK "), y);
+  g.setFontAlign(1, -1);
+  g.drawString(fmtTimeFromDate(astroCache.astroDusk), midX, y);
+  g.setFontAlign(-1, -1);
   y += 20;
 
   g.setColor(pal(COLOR.label));
   g.drawString("LITE", lx, y);
   g.setColor(pal(COLOR.accent));
-  g.drawString(fmtTimeFromDate(astroCache.astroDawn), lx + g.stringWidth("LITE "), y);
+  g.setFontAlign(1, -1);
+  g.drawString(fmtTimeFromDate(astroCache.astroDawn), midX, y);
+  g.setFontAlign(-1, -1);
   y += 20;
 
+  // ISS pass
+  var iss = weather.iss;
+  g.setColor(pal(COLOR.label));
+  g.drawString("ISS", lx, y);
+  g.setFontAlign(1, -1);
+  if (iss) {
+    var issDate = new Date(iss.risetime * 1000);
+    g.setColor(pal(COLOR.iss));
+    g.drawString(fmtTimeFromDate(issDate), midX, y);
+  } else {
+    g.setColor(pal(COLOR.dim));
+    g.drawString("none", midX, y);
+  }
+  g.setFontAlign(-1, -1);
+
   // ── Right column ──────────────────────────────────────────────────────────
-  var rx = Math.floor(W / 2) + 16;
+  var rx = Math.floor(W / 2) + 4;  // labels left-edge
+  var rvx = W - 4;                 // values right-edge
   var ry = 4;
 
   // Moon phase icon
@@ -248,47 +261,41 @@ function drawF1() {
 
   g.setFontAlign(-1, -1);
 
-  // Moon rise / set
+  // Moon rise / set — label left, value right-aligned
   g.setFont("Vector", 16);
   g.setColor(pal(COLOR.label));
   g.drawString("R", rx, ry);
   g.setColor(pal(COLOR.time));
-  g.drawString(fmtTimeFromDate(astroCache.moonRise), rx + g.stringWidth("R "), ry);
+  g.setFontAlign(1, -1);
+  g.drawString(fmtTimeFromDate(astroCache.moonRise), rvx, ry);
+  g.setFontAlign(-1, -1);
   ry += 20;
   g.setColor(pal(COLOR.label));
   g.drawString("S", rx, ry);
   g.setColor(pal(COLOR.time));
-  g.drawString(fmtTimeFromDate(astroCache.moonSet), rx + g.stringWidth("S "), ry);
+  g.setFontAlign(1, -1);
+  g.drawString(fmtTimeFromDate(astroCache.moonSet), rvx, ry);
+  g.setFontAlign(-1, -1);
   ry += 20;
 
-  // Cloud at dusk
+  // Cloud at dusk — label left, value right-aligned
   var cloud = weather.cloudAtDusk;
+  g.setFont("Vector", 16);
   g.setColor(pal(COLOR.label));
   g.drawString("SKY", rx, ry);
   if (cloud !== null && cloud !== undefined) {
     var cAge = weather.fetchedAt ? Math.round((Date.now() - weather.fetchedAt) / 3600000) : null;
     var stale = cAge !== null && cAge > 12;
     g.setColor(pal(cloudColor(cloud)));
-    g.drawString(cloud + "%" + (stale ? "*" : ""), rx + g.stringWidth("SKY "), ry);
+    g.setFontAlign(1, -1);
+    g.drawString(cloud + "%" + (stale ? "*" : ""), rvx, ry);
+    g.setFontAlign(-1, -1);
   } else {
     g.setColor(pal(COLOR.dim));
-    g.drawString("--", rx + g.stringWidth("SKY "), ry);
+    g.setFontAlign(1, -1);
+    g.drawString("--", rvx, ry);
+    g.setFontAlign(-1, -1);
   }
-  ry += 20;
-
-  // ISS pass
-  var iss = weather.iss;
-  g.setColor(pal(COLOR.label));
-  g.drawString("ISS", rx, ry);
-  if (iss) {
-    var issDate = new Date(iss.risetime * 1000);
-    g.setColor(pal(COLOR.iss));
-    g.drawString(fmtTimeFromDate(issDate), rx + g.stringWidth("ISS "), ry);
-  } else {
-    g.setColor(pal(COLOR.dim));
-    g.drawString("none", rx + g.stringWidth("ISS "), ry);
-  }
-  ry += 20;
 
   // ── Bottom bar ────────────────────────────────────────────────────────────
   var by = H - 20;
@@ -312,6 +319,7 @@ function drawF2() {
   var hourly  = weather.hourly || [];
 
   g.reset();
+  g.setBgColor(pal(COLOR.bg));
   g.setColor(pal(COLOR.bg));
   g.fillRect(0, 0, W, H);
 
