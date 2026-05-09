@@ -464,14 +464,13 @@ setWatch(function() {
 
 // ── Clock tick ────────────────────────────────────────────────────────────────
 
-// Redraw every minute, aligned to the minute boundary
-// Align tick to the minute boundary then restart the interval
+// Align first tick to the wall-clock minute boundary.
+// Use stopClock() before startClock() so the swipe listener is never double-registered.
 var now = new Date();
 var msToNextMin = (60 - now.getSeconds()) * 1000 - now.getMilliseconds();
 setTimeout(function() {
-  if (clockInterval) { clearInterval(clockInterval); clockInterval = null; }
-  startClock();
+  if (!inMenu) { stopClock(); startClock(); }
 }, msToNextMin);
 
-// Initial draw — startClock registers the swipe listener and starts the interval
+// Initial draw
 startClock();
