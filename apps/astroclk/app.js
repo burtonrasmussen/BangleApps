@@ -169,7 +169,7 @@ function drawF1() {
   // If suncalc didn't load, show a diagnostic screen instead of crashing
   if (!SunCalc) {
     g.reset(); g.clear();
-    g.setFont("Vector", 16); g.setColor("#FF4444");
+    g.setFont("6x8", 2); g.setColor("#FF4444");
     g.setFontAlign(0, 0);
     g.drawString("Missing: suncalc\nReinstall via\nApp Loader", W/2, H/2);
     return;
@@ -181,12 +181,12 @@ function drawF1() {
 
   // Background
   g.reset();
-  g.setBgColor(pal(COLOR.bg));
   g.setColor(pal(COLOR.bg));
   g.fillRect(0, 0, W, H);
 
   // ── Left column ───────────────────────────────────────────────────────────
   var lx = 4;
+  var rx = W - 4;  // right-align edge for values
   var y  = 4;
 
   // Time (large)
@@ -194,106 +194,96 @@ function drawF1() {
   g.setFontAlign(-1, -1);
   g.setColor(pal(COLOR.time));
   g.drawString(fmtTime(now), lx, y);
+
+  // Moon icon — top right, floating
+  drawMoonIcon(W - 26, y + 20, 18, astroCache.phase || 0);
+
   y += 40;
 
-  // Date
+  // Date (left) + illumination % (right)
   var DAYS  = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
   var MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-  g.setFont("Vector", 16);
+  g.setFont("6x8", 2);
   g.setColor(pal(COLOR.label));
   g.drawString(DAYS[now.getDay()] + " " + now.getDate() + " " + MONTHS[now.getMonth()], lx, y);
-  y += 20;
+  g.setColor(pal(COLOR.moon));
+  g.setFontAlign(1, -1);
+  g.drawString((astroCache.illumination || 0) + "%", rx, y);
+  g.setFontAlign(-1, -1);
+  y += 16;
 
   // Divider
   g.setColor(pal(COLOR.dim));
-  g.drawLine(lx, y + 2, W / 2 - 4, y + 2);
+  g.drawLine(0, y + 2, W, y + 2);
   y += 8;
 
-  // Astronomical night window — label left, value right-aligned to column edge
-  g.setFont("Vector", 16);
-  var midX = Math.floor(W / 2);
+  // Full-width rows: label left, value right-aligned to screen edge
+  g.setFont("6x8", 2);
+
+  // DARK (astronomical dusk)
   g.setColor(pal(COLOR.label));
   g.drawString("DARK", lx, y);
   g.setColor(pal(COLOR.accent));
   g.setFontAlign(1, -1);
-  g.drawString(fmtTimeFromDate(astroCache.astroDusk), midX, y);
+  g.drawString(fmtTimeFromDate(astroCache.astroDusk), rx, y);
   g.setFontAlign(-1, -1);
-  y += 20;
+  y += 16;
 
+  // LITE (astronomical dawn)
   g.setColor(pal(COLOR.label));
   g.drawString("LITE", lx, y);
   g.setColor(pal(COLOR.accent));
   g.setFontAlign(1, -1);
-  g.drawString(fmtTimeFromDate(astroCache.astroDawn), midX, y);
+  g.drawString(fmtTimeFromDate(astroCache.astroDawn), rx, y);
   g.setFontAlign(-1, -1);
-  y += 20;
+  y += 16;
 
-  // ISS pass
-  var iss = weather.iss;
+  // Moon rise (left half) + Moon set (right half) — shared row
+  // "R" label at lx, value left-aligned after; "S" label at W/2, value left-aligned after
+  var mid = Math.floor(W / 2);
   g.setColor(pal(COLOR.label));
-  g.drawString("ISS", lx, y);
-  g.setFontAlign(1, -1);
-  if (iss) {
-    var issDate = new Date(iss.risetime * 1000);
-    g.setColor(pal(COLOR.iss));
-    g.drawString(fmtTimeFromDate(issDate), midX, y);
-  } else {
-    g.setColor(pal(COLOR.dim));
-    g.drawString("none", midX, y);
-  }
-  g.setFontAlign(-1, -1);
-
-  // ── Right column ──────────────────────────────────────────────────────────
-  var rx = Math.floor(W / 2) + 4;  // labels left-edge
-  var rvx = W - 4;                 // values right-edge
-  var ry = 4;
-
-  // Moon phase icon
-  drawMoonIcon(W - 28, ry + 20, 18, astroCache.phase || 0);
-  ry += 44;
-
-  // Illumination %
-  g.setFont("Vector", 16);
-  g.setColor(pal(COLOR.moon));
-  g.setFontAlign(0, -1);
-  g.drawString((astroCache.illumination || 0) + "%", W - 28, ry);
-  ry += 20;
-
-  g.setFontAlign(-1, -1);
-
-  // Moon rise / set — label left, value right-aligned
-  g.setFont("Vector", 16);
-  g.setColor(pal(COLOR.label));
-  g.drawString("R", rx, ry);
+  g.drawString("R", lx, y);
   g.setColor(pal(COLOR.time));
-  g.setFontAlign(1, -1);
-  g.drawString(fmtTimeFromDate(astroCache.moonRise), rvx, ry);
-  g.setFontAlign(-1, -1);
-  ry += 20;
+  g.drawString(fmtTimeFromDate(astroCache.moonRise), lx + 16, y);
   g.setColor(pal(COLOR.label));
-  g.drawString("S", rx, ry);
+  g.drawString("S", mid, y);
   g.setColor(pal(COLOR.time));
-  g.setFontAlign(1, -1);
-  g.drawString(fmtTimeFromDate(astroCache.moonSet), rvx, ry);
-  g.setFontAlign(-1, -1);
-  ry += 20;
+  g.drawString(fmtTimeFromDate(astroCache.moonSet), mid + 16, y);
+  y += 16;
 
-  // Cloud at dusk — label left, value right-aligned
+  // SKY (cloud at dusk)
   var cloud = weather.cloudAtDusk;
-  g.setFont("Vector", 16);
   g.setColor(pal(COLOR.label));
-  g.drawString("SKY", rx, ry);
+  g.drawString("SKY", lx, y);
   if (cloud !== null && cloud !== undefined) {
     var cAge = weather.fetchedAt ? Math.round((Date.now() - weather.fetchedAt) / 3600000) : null;
     var stale = cAge !== null && cAge > 12;
     g.setColor(pal(cloudColor(cloud)));
     g.setFontAlign(1, -1);
-    g.drawString(cloud + "%" + (stale ? "*" : ""), rvx, ry);
+    g.drawString(cloud + "%" + (stale ? "*" : ""), rx, y);
     g.setFontAlign(-1, -1);
   } else {
     g.setColor(pal(COLOR.dim));
     g.setFontAlign(1, -1);
-    g.drawString("--", rvx, ry);
+    g.drawString("--", rx, y);
+    g.setFontAlign(-1, -1);
+  }
+  y += 16;
+
+  // ISS pass
+  var iss = weather.iss;
+  g.setColor(pal(COLOR.label));
+  g.drawString("ISS", lx, y);
+  if (iss) {
+    var issDate = new Date(iss.risetime * 1000);
+    g.setColor(pal(COLOR.iss));
+    g.setFontAlign(1, -1);
+    g.drawString(fmtTimeFromDate(issDate), rx, y);
+    g.setFontAlign(-1, -1);
+  } else {
+    g.setColor(pal(COLOR.dim));
+    g.setFontAlign(1, -1);
+    g.drawString("none", rx, y);
     g.setFontAlign(-1, -1);
   }
 
@@ -305,7 +295,7 @@ function drawF1() {
   // Battery
   var bat = E.getBattery();
   var batColor = bat > 30 ? COLOR.good : bat > 15 ? COLOR.warn : COLOR.bad;
-  g.setFont("Vector", 16);
+  g.setFont("6x8", 2);
   g.setColor(pal(batColor));
   g.setFontAlign(-1, -1);
   g.drawString("BAT " + bat + "%", 4, by);
@@ -319,12 +309,11 @@ function drawF2() {
   var hourly  = weather.hourly || [];
 
   g.reset();
-  g.setBgColor(pal(COLOR.bg));
   g.setColor(pal(COLOR.bg));
   g.fillRect(0, 0, W, H);
 
   // Header
-  g.setFont("Vector", 16);
+  g.setFont("6x8", 2);
   g.setColor(pal(COLOR.accent));
   g.setFontAlign(0, -1);
   g.drawString("TONIGHT", W / 2, 2);
@@ -338,7 +327,7 @@ function drawF2() {
   g.drawLine(0, hdrY + 9, W, hdrY + 9);
 
   if (hourly.length === 0) {
-    g.setFont("Vector", 16);
+    g.setFont("6x8", 2);
     g.setColor(pal(COLOR.label));
     g.setFontAlign(0, 0);
     g.drawString("No data\nFetch via BLE", W / 2, H / 2);
