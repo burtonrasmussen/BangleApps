@@ -1,7 +1,10 @@
 // astroclk.fetch.js
 // Pulls Open-Meteo weather data and Open-Notify ISS pass times from the phone
-// via Gadgetbridge's Bangle.http() bridge.  Results are trimmed to tonight's
-// astronomical night window and written to astroclk.weather.json.
+// via Gadgetbridge's Bangle.http() bridge (requires Android Integration app +
+// Gadgetbridge with "Allow Internet Access"). Gadgetbridge accepts HTTPS URLs
+// only; Open-Notify is HTTP-only, so we load it through an HTTPS raw proxy.
+// Results are trimmed to tonight's astronomical night window and written to
+// astroclk.weather.json.
 //
 // Caller pattern:
 //   require("Storage").eval("astroclk.fetch.js").fetch(onDone, onError);
@@ -20,7 +23,39 @@
 //   }
 // }
 
+var HTTP_OPTS = { timeout: 45000 };
+
+function httpText(ev) {
+  if (!ev) return "";
+  if (typeof ev === "string") return ev;
+  if (typeof ev.resp === "string") return ev.resp;
+  return "";
+}
+
+function parseJson(ev, what) {
+  var s = httpText(ev);
+  if (!s) throw what + ": empty body";
+  try { return JSON.parse(s); }
+  catch (e) { throw what + ": bad JSON"; }
+}
+
+// Open-Notify is HTTP-only; Bangle/Gadgetbridge requires HTTPS — wrap via raw proxy.
+function issProxyUrl(lat, lon) {
+  var q = "http://api.open-notify.org/iss-pass.json" +
+    "?lat=" + lat.toFixed(4) + "&lon=" + lon.toFixed(4) + "&n=5";
+  return "https://api.allorigins.win/raw?url=" + encodeURIComponent(q);
+}
+
 exports.fetch = function(onDone, onError) {
+  if (typeof Bangle.http !== "function") {
+    if (onError) onError("Android Integration app not loaded");
+    return;
+  }
+  if (!NRF.getSecurityStatus || !NRF.getSecurityStatus().connected) {
+    if (onError) onError("Bluetooth not connected");
+    return;
+  }
+
   var loc = require("Storage").readJSON("mylocation.json", 1);
   if (!loc || !loc.lat || !loc.lon) {
     if (onError) onError("No location set — open MyLocation app first");
@@ -41,31 +76,38 @@ exports.fetch = function(onDone, onError) {
   var duskMs = dusk ? dusk.getTime()  : now.getTime();
   var dawnMs = dawn ? dawn.getTime()  : duskMs + 8 * 3600000;
 
+  function isoLocal(ms) {
+    var d = new Date(ms);
+    var m = d.getMonth() + 1, day = d.getDate();
+    return d.getFullYear() + "-" + (m < 10 ? "0" : "") + m + "-" + (day < 10 ? "0" : "") + day;
+  }
+  // Narrow date range on the server so the JSON fits comfortably over BLE.
+  var startDate = isoLocal(Math.min(now.getTime(), duskMs));
+  var endDate   = isoLocal(Math.max(dawnMs, duskMs));
+
   // --- Step 1: Open-Meteo hourly weather ---
   var meteoUrl = "https://api.open-meteo.com/v1/forecast" +
     "?latitude=" + lat.toFixed(4) +
     "&longitude=" + lon.toFixed(4) +
     "&hourly=cloudcover,windspeed_10m,precipitation_probability,relativehumidity_2m" +
-    "&forecast_days=2" +
+    "&start_date=" + startDate +
+    "&end_date=" + endDate +
     "&timezone=auto";
 
-  Bangle.http(meteoUrl).then(function(resp) {
+  Bangle.http(meteoUrl, HTTP_OPTS).then(function(resp) {
     var meteoData;
-    try { meteoData = JSON.parse(resp.resp || resp); }
-    catch(e) { if (onError) onError("Meteo parse error"); return; }
+    try { meteoData = parseJson(resp, "Meteo"); }
+    catch (e) { if (onError) onError(e); return; }
 
     var hourly = _trimMeteo(meteoData, duskMs, dawnMs);
 
-    // --- Step 2: Open-Notify ISS passes ---
-    var issUrl = "http://api.open-notify.org/iss-pass.json" +
-      "?lat=" + lat.toFixed(4) +
-      "&lon=" + lon.toFixed(4) +
-      "&n=5";
+    // --- Step 2: Open-Notify ISS passes (HTTPS-wrapped) ---
+    var issUrl = issProxyUrl(lat, lon);
 
-    Bangle.http(issUrl).then(function(resp2) {
+    Bangle.http(issUrl, HTTP_OPTS).then(function(resp2) {
       var issData;
-      try { issData = JSON.parse(resp2.resp || resp2); }
-      catch(e) { issData = null; }
+      try { issData = parseJson(resp2, "ISS"); }
+      catch (e) { issData = null; }
 
       var issPass = _findIssPass(issData, duskMs / 1000, dawnMs / 1000);
 

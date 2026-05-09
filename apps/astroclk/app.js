@@ -427,7 +427,11 @@ setWatch(function() {
     "< Back":        function() { startClock(); },
     "Fetch Weather": function() {
       if (typeof Bangle.http !== "function") {
-        E.showAlert("Gadgetbridge\nnot connected").then(startClock);
+        E.showAlert("Android Integration\nnot installed").then(startClock);
+        return;
+      }
+      if (!NRF.getSecurityStatus || !NRF.getSecurityStatus().connected) {
+        E.showAlert("Bluetooth\nnot connected").then(startClock);
         return;
       }
       E.showMessage("Fetching...");

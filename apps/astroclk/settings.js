@@ -64,7 +64,11 @@
     },
     "Fetch Weather Now": function() {
       if (typeof Bangle.http !== "function") {
-        E.showAlert("Gadgetbridge\nnot connected").then(function() { E.showMenu(menu); });
+        E.showAlert("Android Integration\nnot installed").then(function() { E.showMenu(menu); });
+        return;
+      }
+      if (!NRF.getSecurityStatus || !NRF.getSecurityStatus().connected) {
+        E.showAlert("Bluetooth\nnot connected").then(function() { E.showMenu(menu); });
         return;
       }
       E.showMessage("Fetching...");

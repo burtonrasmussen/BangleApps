@@ -116,6 +116,7 @@
     var ageH = (Date.now() - (weather.fetchedAt || 0)) / 3600000;
     if (ageH < 20) return; // already fresh
     if (typeof Bangle.http !== "function") return; // android boot not loaded yet
+    if (!NRF.getSecurityStatus || !NRF.getSecurityStatus().connected) return;
     require("Storage").eval("astroclk.fetch.js").fetch(null, null);
   }
 

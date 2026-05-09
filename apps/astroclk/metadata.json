@@ -2,7 +2,7 @@
   "id": "astroclk",
   "name": "AstroWatch",
   "shortName": "AstroWatch",
-  "version": "0.01",
+  "version": "0.02",
   "description": "Astronomy-focused watch face with moon phase, sky conditions, and barometric forecast. Fetches weather and ISS passes from phone via Gadgetbridge.",
   "icon": "app.png",
   "type": "clock",
