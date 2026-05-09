@@ -53,7 +53,7 @@ var COLOR = {
 var zambretti, SunCalc;
 try { zambretti = require("Storage").eval("astroclk.zambretti.js"); } catch(e) { zambretti = null; }
 try { SunCalc = require("suncalc"); } catch(e) { SunCalc = null; }
-try { require("FontTeletext10x18Ascii").add(Graphics); } catch(e) {}
+
 
 // ── State ─────────────────────────────────────────────────────────────────────
 var screen = 1;          // 1 = F1, 2 = F2
@@ -169,7 +169,7 @@ function drawF1() {
   // If suncalc didn't load, show a diagnostic screen instead of crashing
   if (!SunCalc) {
     g.reset(); g.clear();
-    g.setFont("Teletext10x18Ascii"); g.setColor("#FF4444");
+    g.setFont("Vector", 16); g.setColor("#FF4444");
     g.setFontAlign(0, 0);
     g.drawString("Missing: suncalc\nReinstall via\nApp Loader", W/2, H/2);
     return;
@@ -198,17 +198,18 @@ function drawF1() {
   // Date
   var DAYS  = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
   var MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-  g.setFont("Teletext10x18Ascii");
+  g.setFont("Vector", 16);
   g.setColor(pal(COLOR.label));
   g.drawString(DAYS[now.getDay()] + " " + now.getDate() + " " + MONTHS[now.getMonth()], lx, y);
   y += 20;
 
   // Steps
+  g.setFont("Vector", 16);
   g.setColor(pal(COLOR.label));
   g.drawString("STP", lx, y);
   g.setColor(pal(COLOR.time));
   var steps = Bangle.getHealthStatus ? (Bangle.getHealthStatus().steps || 0) : 0;
-  g.drawString(" " + steps, lx + 40, y);
+  g.drawString(steps, lx + g.stringWidth("STP "), y);
   y += 20;
 
   // Divider
@@ -216,18 +217,18 @@ function drawF1() {
   g.drawLine(lx, y + 2, W / 2 - 4, y + 2);
   y += 8;
 
-  // Astronomical night window (dark = astro dusk, lite = astro dawn next morning)
-  g.setFont("Teletext10x18Ascii");
+  // Astronomical night window
+  g.setFont("Vector", 16);
   g.setColor(pal(COLOR.label));
   g.drawString("DARK", lx, y);
   g.setColor(pal(COLOR.accent));
-  g.drawString(" " + fmtTimeFromDate(astroCache.astroDusk), lx + 50, y);
+  g.drawString(fmtTimeFromDate(astroCache.astroDusk), lx + g.stringWidth("DARK "), y);
   y += 20;
 
   g.setColor(pal(COLOR.label));
   g.drawString("LITE", lx, y);
   g.setColor(pal(COLOR.accent));
-  g.drawString(" " + fmtTimeFromDate(astroCache.astroDawn), lx + 50, y);
+  g.drawString(fmtTimeFromDate(astroCache.astroDawn), lx + g.stringWidth("LITE "), y);
   y += 20;
 
   // ── Right column ──────────────────────────────────────────────────────────
@@ -239,7 +240,7 @@ function drawF1() {
   ry += 44;
 
   // Illumination %
-  g.setFont("Teletext10x18Ascii");
+  g.setFont("Vector", 16);
   g.setColor(pal(COLOR.moon));
   g.setFontAlign(0, -1);
   g.drawString((astroCache.illumination || 0) + "%", W - 28, ry);
@@ -248,10 +249,16 @@ function drawF1() {
   g.setFontAlign(-1, -1);
 
   // Moon rise / set
+  g.setFont("Vector", 16);
   g.setColor(pal(COLOR.label));
-  g.drawString("R " + fmtTimeFromDate(astroCache.moonRise), rx, ry);
+  g.drawString("R", rx, ry);
+  g.setColor(pal(COLOR.time));
+  g.drawString(fmtTimeFromDate(astroCache.moonRise), rx + g.stringWidth("R "), ry);
   ry += 20;
-  g.drawString("S " + fmtTimeFromDate(astroCache.moonSet), rx, ry);
+  g.setColor(pal(COLOR.label));
+  g.drawString("S", rx, ry);
+  g.setColor(pal(COLOR.time));
+  g.drawString(fmtTimeFromDate(astroCache.moonSet), rx + g.stringWidth("S "), ry);
   ry += 20;
 
   // Cloud at dusk
@@ -262,10 +269,10 @@ function drawF1() {
     var cAge = weather.fetchedAt ? Math.round((Date.now() - weather.fetchedAt) / 3600000) : null;
     var stale = cAge !== null && cAge > 12;
     g.setColor(pal(cloudColor(cloud)));
-    g.drawString(" " + cloud + "%" + (stale ? "*" : ""), rx + 40, ry);
+    g.drawString(cloud + "%" + (stale ? "*" : ""), rx + g.stringWidth("SKY "), ry);
   } else {
     g.setColor(pal(COLOR.dim));
-    g.drawString(" --", rx + 40, ry);
+    g.drawString("--", rx + g.stringWidth("SKY "), ry);
   }
   ry += 20;
 
@@ -276,10 +283,10 @@ function drawF1() {
   if (iss) {
     var issDate = new Date(iss.risetime * 1000);
     g.setColor(pal(COLOR.iss));
-    g.drawString(" " + fmtTimeFromDate(issDate), rx + 40, ry);
+    g.drawString(fmtTimeFromDate(issDate), rx + g.stringWidth("ISS "), ry);
   } else {
     g.setColor(pal(COLOR.dim));
-    g.drawString(" none", rx + 40, ry);
+    g.drawString("none", rx + g.stringWidth("ISS "), ry);
   }
   ry += 20;
 
@@ -291,7 +298,7 @@ function drawF1() {
   // Battery
   var bat = E.getBattery();
   var batColor = bat > 30 ? COLOR.good : bat > 15 ? COLOR.warn : COLOR.bad;
-  g.setFont("Teletext10x18Ascii");
+  g.setFont("Vector", 16);
   g.setColor(pal(batColor));
   g.setFontAlign(-1, -1);
   g.drawString("BAT " + bat + "%", 4, by);
@@ -309,7 +316,7 @@ function drawF2() {
   g.fillRect(0, 0, W, H);
 
   // Header
-  g.setFont("Teletext10x18Ascii");
+  g.setFont("Vector", 16);
   g.setColor(pal(COLOR.accent));
   g.setFontAlign(0, -1);
   g.drawString("TONIGHT", W / 2, 2);
@@ -323,7 +330,7 @@ function drawF2() {
   g.drawLine(0, hdrY + 9, W, hdrY + 9);
 
   if (hourly.length === 0) {
-    g.setFont("Teletext10x18Ascii");
+    g.setFont("Vector", 16);
     g.setColor(pal(COLOR.label));
     g.setFontAlign(0, 0);
     g.drawString("No data\nFetch via BLE", W / 2, H / 2);

@@ -12,8 +12,7 @@
   "readme": "README.md",
   "dependencies": {
     "mylocation": "app",
-    "android": "app",
-    "FontTeletext10x18Ascii": "module"
+    "android": "app"
   },
   "storage": [
     {"name": "astroclk.app.js",       "url": "app.js"},
