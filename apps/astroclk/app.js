@@ -36,13 +36,13 @@ function pal(hex) {
 var COLOR = {
   bg:       "#FFFFFF",
   time:     "#000000",
-  label:    "#555555",
+  label:    "#000000",
   accent:   "#000000",
   moon:     "#000000",
-  good:     "#228822",
-  warn:     "#BB6600",
-  bad:      "#AA2222",
-  dim:      "#999999",
+  good:     "#00AA00",
+  warn:     "#FFFF00",
+  bad:      "#FF0000",
+  dim:      "#000000",
   iss:      "#000000",
   batt:     "#000000"
 };
