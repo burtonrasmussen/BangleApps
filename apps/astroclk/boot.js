@@ -120,6 +120,29 @@
   }
 
   // ── Boot sequence ─────────────────────────────────────────────────────────────
+  // The frontlight LED brightness is implemented as software PWM driven by
+  // Espruino's poll loop. Power-save mode slows the poll from 80ms to 800ms
+  // (when the watch has been stationary for ~1 minute), which drops the PWM
+  // frequency from 12.5Hz to 1.25Hz — visibly flickering LEDs. The watch wakes
+  // from power-save when the user raises their wrist or presses a button, then
+  // gradually ramps the poll back to 80ms over ~5-10s (matching reported symptom).
+  // Fix: force 80ms poll the moment the backlight turns on, restore powerSave
+  // 2s after it turns off.
+  var pollRestoreTimer = null;
+  Bangle.on("backlight", function(on) {
+    if (pollRestoreTimer) { clearTimeout(pollRestoreTimer); pollRestoreTimer = null; }
+    if (on) {
+      Bangle.setOptions({powerSave: false});
+      Bangle.setPollInterval(80);
+    } else {
+      // Short delay before restoring so any final redraws stay flicker-free
+      pollRestoreTimer = setTimeout(function() {
+        pollRestoreTimer = null;
+        Bangle.setOptions({powerSave: true});
+      }, 2000);
+    }
+  });
+
   maybeGpsSync();
   startHRM();
   samplePressure();
