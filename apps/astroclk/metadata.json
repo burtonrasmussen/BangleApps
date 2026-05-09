@@ -13,7 +13,7 @@
   "dependencies": {
     "mylocation": "app",
     "android": "app",
-    "FontVGA16": "module"
+    "FontTeletext10x18Ascii": "module"
   },
   "storage": [
     {"name": "astroclk.app.js",       "url": "app.js"},
