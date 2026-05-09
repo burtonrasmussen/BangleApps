@@ -188,7 +188,7 @@ function drawF1() {
   // ── Layout constants ──────────────────────────────────────────────────────
   var lx  = 4;           // left col label x
   var lcx = Math.floor(W / 2) - 2;  // left col values right-align here
-  var rcx = Math.floor(W / 2) + 2;  // right col labels start here
+  var rcx = W - 60;      // right col labels start here (56px wide, ends at W-4)
   var rvx = W - 4;       // right col values right-align here
   var y   = 4;
 
