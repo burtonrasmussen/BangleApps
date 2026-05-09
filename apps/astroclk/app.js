@@ -156,9 +156,9 @@ function refreshAstro() {
     illumination: Math.round(moonIll.fraction * 100),  // %
     moonRise:   moonTimes.rise,         // Date or undefined
     moonSet:    moonTimes.set,          // Date or undefined
-    astroDusk:  sunTimes.astronomicalDusk || sunTimes.dusk,
-    astroDawn:  SunCalc.getTimes(new Date(now.getTime() + 86400000), lat, lon).astronomicalDawn
-                || SunCalc.getTimes(new Date(now.getTime() + 86400000), lat, lon).dawn
+    astroDusk:  sunTimes.night || sunTimes.nauticalDusk,
+    astroDawn:  SunCalc.getTimes(new Date(now.getTime() + 86400000), lat, lon).nightEnd
+                || SunCalc.getTimes(new Date(now.getTime() + 86400000), lat, lon).nauticalDawn
   };
 }
 
