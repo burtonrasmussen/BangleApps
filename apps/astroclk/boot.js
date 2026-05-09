@@ -120,23 +120,6 @@
   }
 
   // ── Boot sequence ─────────────────────────────────────────────────────────────
-  // Stop background sensors the moment the frontlight wakes (user interaction).
-  // Resume 30 s after the display goes off again — no interference with the user.
-  var displayOffTimer = null;
-  Bangle.on("lcdPower", function(on) {
-    if (on) {
-      stopHrmNow();
-      stopGpsNow();
-      if (displayOffTimer) { clearTimeout(displayOffTimer); displayOffTimer = null; }
-    } else {
-      displayOffTimer = setTimeout(function() {
-        displayOffTimer = null;
-        doHrmPoll();
-        maybeGpsSync();
-      }, 30000);
-    }
-  });
-
   maybeGpsSync();
   startHRM();
   samplePressure();
