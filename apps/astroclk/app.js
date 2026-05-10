@@ -16,7 +16,7 @@ var H = g.getHeight();   // 176
 var SETTINGS_FILE = "astroclk.json";
 
 var settings = require("Storage").readJSON(SETTINGS_FILE, 1) || {
-  use12h:   false,
+  use12h:   true,
   redMode:  false,
   windUnit: "mph"   // "mph" | "kmh"
 };
@@ -196,7 +196,7 @@ function drawF1() {
     var h12  = now.getHours() % 12 || 12;
     var ampm = now.getHours() >= 12 ? "PM" : "AM";
     g.drawString(h12 + ":" + pad2(now.getMinutes()), lx, 2);
-    g.setFont("VGA16");
+    g.setFont("Vector", 26);
     g.setFontAlign(1, -1);
     g.drawString(ampm, rvx, 2);
   } else {
