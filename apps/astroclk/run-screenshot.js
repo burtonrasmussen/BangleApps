@@ -15,20 +15,21 @@ function storageWrite(filename, content) {
 
 function buildUploadCommands() {
   let cmds = "";
-  const appFiles = [
-    ["astroclk.app.js", "app.js"],
-    ["astroclk.boot.js", "boot.js"],
-  ];
-  for (const [storageName, localFile] of appFiles) {
-    cmds += storageWrite(storageName, fs.readFileSync(path.join(APP_DIR, localFile), "utf8"));
-  }
+  // Prepend E.setTimeZone() to app.js so getHours() returns local time.
+  // setTime() is ignored by the emulator (it always uses host UTC clock),
+  // but E.setTimeZone() is respected and offsets all Date.getHours() etc.
+  const tzOffsetHours = -new Date().getTimezoneOffset() / 60;
+  const appContent = 'E.setTimeZone(' + tzOffsetHours + ');\n' +
+    fs.readFileSync(path.join(APP_DIR, 'app.js'), 'utf8');
+  cmds += storageWrite('astroclk.app.js', appContent);
+  cmds += storageWrite('astroclk.boot.js', fs.readFileSync(path.join(APP_DIR, 'boot.js'), 'utf8'));
   cmds += storageWrite("suncalc", fs.readFileSync(path.join(BASE_DIR, "modules/suncalc.js"), "utf8"));
   cmds += storageWrite("FontVGA16", fs.readFileSync(path.join(APP_DIR, "FontVGA16.js"), "utf8"));
   cmds += 'require("Storage").writeJSON("mylocation.json", {"lat":45.52,"lon":-122.68,"alt":50,"accuracy":5});\n';
   const now = Date.now();
   const weather = '{"fetchedAt":' + now + ',"cloudAtDusk":25,"iss":{"risetime":' + (Math.floor(now/1000)+3600) + ',"duration":360},"hourly":[{"hour":21,"cloud":20,"wind":5,"precip":0,"humidity":55},{"hour":22,"cloud":30,"wind":6,"precip":0,"humidity":58},{"hour":23,"cloud":15,"wind":4,"precip":0,"humidity":52},{"hour":0,"cloud":10,"wind":3,"precip":0,"humidity":50}]}';
   cmds += 'require("Storage").writeJSON("astroclk.weather.json", ' + weather + ');\n';
-  cmds += 'require("Storage").writeJSON("astroclk.settings.json", {"redMode":false,"use24h":true,"windUnit":"mph","hrmInterval":5});\n';
+  cmds += 'require("Storage").writeJSON("astroclk.settings.json", {"use12h":true,"windUnit":"mph"});\n';
   return cmds;
 }
 
