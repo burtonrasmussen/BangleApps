@@ -17,7 +17,6 @@ function buildUploadCommands() {
   let cmds = "";
   const appFiles = [
     ["astroclk.app.js", "app.js"],
-    ["astroclk.zambretti.js", "zambretti.js"],
     ["astroclk.boot.js", "boot.js"],
   ];
   for (const [storageName, localFile] of appFiles) {
