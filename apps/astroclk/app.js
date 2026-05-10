@@ -17,21 +17,11 @@ var SETTINGS_FILE = "astroclk.json";
 
 var settings = require("Storage").readJSON(SETTINGS_FILE, 1) || {
   use12h:   true,
-  redMode:  false,
   windUnit: "mph"   // "mph" | "kmh"
 };
 
-// ── Palette (normal / red mode) ───────────────────────────────────────────────
-function pal(hex) {
-  // In red mode, convert to a red-channel-only version
-  if (!settings.redMode) return hex;
-  // Parse hex color, keep only red channel (dim green/blue to 0)
-  var r = parseInt(hex.slice(1, 3), 16);
-  // Map luminance to red channel — simple: use r/4 of original luma
-  var luma = Math.round(0.299 * r + 0.587 * parseInt(hex.slice(3, 5), 16) + 0.114 * parseInt(hex.slice(5, 7), 16));
-  var rv = Math.min(255, Math.round(luma * 0.9));
-  return g.toColor(rv / 255, 0, 0);
-}
+// ── Palette (passthrough — 3-bit LCD needs no conversion) ───────────────────
+function pal(hex) { return hex; }
 
 var COLOR = {
   bg:       "#FFFFFF",
@@ -432,54 +422,30 @@ setWatch(function() {
   menuRef = E.showMenu({
     "": { title: "AstroWatch", back: startClock },
     "< Back":        function() { startClock(); },
-    "Show Log": function() {
-      var lines = require("Storage").readJSON("astroclk.log.json", 1) || [];
-      var txt = lines.length ? lines.join("\n") : "(empty)";
-      E.showScroller({
-        h: 16, c: lines.length || 1,
-        draw: function(i, r) {
-          g.setColor(1,1,1).fillRect(r.x,r.y,r.x+r.w,r.y+r.h);
-          g.setColor(0,0,0).setFont("6x8").drawString(lines[i]||"(empty)",r.x+2,r.y+4);
-        },
-        select: function() { E.showMenu(menuRef); }
-      });
-    },
-    "Clear Log": function() {
-      require("Storage").erase("astroclk.log.json");
-      E.showAlert("Log cleared").then(function() { E.showMenu(menuRef); });
-    },
-    "Test HTTP": function() {
-      if (typeof Bangle.http !== "function") {
-        E.showAlert("Bangle.http\nnot available").then(function() { E.showMenu(menuRef); });
-        return;
+    "12h Clock": {
+      value: !!settings.use12h,
+      onchange: function(v) {
+        settings.use12h = v;
+        require("Storage").writeJSON(SETTINGS_FILE, settings);
       }
-      E.showMessage("Testing...");
-      Bangle.http("https://httpbin.org/get", { timeout: 20000 }).then(function(r) {
-        var s = r && r.resp ? r.resp.slice(0, 60) : JSON.stringify(r).slice(0, 60);
-        E.showAlert("OK:\n" + s).then(function() { E.showMenu(menuRef); });
-      }).catch(function(e) {
-        E.showAlert("FAIL:\n" + e).then(function() { E.showMenu(menuRef); });
-      });
     },
-    "Test Meteo": function() {
-      if (typeof Bangle.http !== "function") {
-        E.showAlert("Bangle.http\nnot available").then(function() { E.showMenu(menuRef); });
-        return;
+    "Wind Unit": {
+      value: settings.windUnit === "mph" ? 0 : 1,
+      min: 0, max: 1,
+      format: function(v) { return v === 0 ? "mph" : "km/h"; },
+      onchange: function(v) {
+        settings.windUnit = v === 0 ? "mph" : "kmh";
+        require("Storage").writeJSON(SETTINGS_FILE, settings);
       }
-      var loc = require("Storage").readJSON("mylocation.json", 1);
-      if (!loc || !loc.lat) {
-        loc = { lat: 40.7608, lon: -111.891 };
-        require("Storage").writeJSON("mylocation.json", loc);
+    },
+    "Weather Source": {
+      value: settings.weatherProvider === "astrospheric" ? 1 : 0,
+      min: 0, max: 1,
+      format: function(v) { return v ? "Astrospheric" : "OpenMeteo"; },
+      onchange: function(v) {
+        settings.weatherProvider = v ? "astrospheric" : "openmeteo";
+        require("Storage").writeJSON(SETTINGS_FILE, settings);
       }
-      E.showMessage("Testing meteo...");
-      var url = "https://api.open-meteo.com/v1/forecast?latitude=" + loc.lat.toFixed(4) +
-        "&longitude=" + loc.lon.toFixed(4) + "&current=cloud_cover&forecast_days=1";
-      Bangle.http(url, { timeout: 20000 }).then(function(r) {
-        var s = r && r.resp ? r.resp.slice(0, 80) : JSON.stringify(r).slice(0, 80);
-        E.showAlert("Meteo OK:\n" + s).then(function() { E.showMenu(menuRef); });
-      }).catch(function(e) {
-        E.showAlert("Meteo FAIL:\n" + e).then(function() { E.showMenu(menuRef); });
-      });
     },
     "Fetch Weather": function() {
       if (typeof Bangle.http !== "function") {
@@ -529,28 +495,20 @@ setWatch(function() {
         }
       );
     },
-    "Red Mode": {
-      value: !!settings.redMode,
-      onchange: function(v) {
-        settings.redMode = v;
-        require("Storage").writeJSON(SETTINGS_FILE, settings);
-      }
+    "Show Log": function() {
+      var lines = require("Storage").readJSON("astroclk.log.json", 1) || [];
+      E.showScroller({
+        h: 16, c: lines.length || 1,
+        draw: function(i, r) {
+          g.setColor(1,1,1).fillRect(r.x,r.y,r.x+r.w,r.y+r.h);
+          g.setColor(0,0,0).setFont("6x8").drawString(lines[i]||"(empty)",r.x+2,r.y+4);
+        },
+        select: function() { E.showMenu(menuRef); }
+      });
     },
-    "12h Clock": {
-      value: !!settings.use12h,
-      onchange: function(v) {
-        settings.use12h = v;
-        require("Storage").writeJSON(SETTINGS_FILE, settings);
-      }
-    },
-    "Wind Unit": {
-      value: settings.windUnit === "mph" ? 0 : 1,
-      min: 0, max: 1,
-      format: function(v) { return v === 0 ? "mph" : "km/h"; },
-      onchange: function(v) {
-        settings.windUnit = v === 0 ? "mph" : "kmh";
-        require("Storage").writeJSON(SETTINGS_FILE, settings);
-      }
+    "Clear Log": function() {
+      require("Storage").erase("astroclk.log.json");
+      E.showAlert("Log cleared").then(function() { E.showMenu(menuRef); });
     }
 });
 }, BTN1, { repeat: true, edge: "falling", debounce: 50 });

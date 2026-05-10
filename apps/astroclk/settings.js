@@ -13,10 +13,6 @@
   var menu = {
     "": { title: "AstroWatch" },
     "< Back": back,
-    "Red Mode": {
-      value: !!settings.redMode,
-      onchange: function(v) { save("redMode", v); }
-    },
     "24h / 12h": {
       value: !!settings.use12h,
       format: function(v) { return v ? "12h" : "24h"; },
