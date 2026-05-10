@@ -50,8 +50,7 @@ var COLOR = {
 // ── Module references (hoisted — required once, not on every draw) ────────────
 // Wrapped in try/catch so a missing file shows an error screen instead of
 // a silent "Loading..." hang.
-var zambretti, SunCalc;
-try { zambretti = require("Storage").eval("astroclk.zambretti.js"); } catch(e) { zambretti = null; }
+var SunCalc;
 try { SunCalc = require("suncalc"); } catch(e) { SunCalc = null; }
 try { require("FontVGA16").add(Graphics); } catch(e) {}
 
@@ -323,11 +322,14 @@ function drawF2() {
   g.setFontAlign(0, -1);
   g.drawString("TONIGHT", W / 2, 2);
 
-  g.setFont("6x8", 1);
-  g.setColor(pal(COLOR.label));
-  g.setFontAlign(-1, -1);
   var hdrY = 22;
-  g.drawString("TIME  CLD  WND  PCPN  HUM", 4, hdrY);
+  g.setFont("6x8", 1);
+  g.setFontAlign(-1, -1);
+  g.setColor(pal(COLOR.label));
+  g.drawString("TIME",  4,   hdrY);
+  g.drawString("CLD%",  52,  hdrY);
+  g.drawString("SEE",   100, hdrY);
+  g.drawString("TRNS",  133, hdrY);
   g.setColor(pal(COLOR.dim));
   g.drawLine(0, hdrY + 9, W, hdrY + 9);
 
@@ -354,24 +356,32 @@ function drawF2() {
       g.fillRect(0, ry, W, ry + rowH - 1);
     }
 
-    // Cloud color coding
-    var cc = cloudColor(row.cloud);
-    g.setColor(pal(cc));
     g.setFont("6x8", 1);
     g.setFontAlign(-1, -1);
 
-    var windVal = row.wind !== null
-      ? (settings.windUnit === "mph"
-          ? Math.round(row.wind * 0.621)
-          : Math.round(row.wind)) + (settings.windUnit === "mph" ? "m" : "k")
-      : "--";
+    // Time
+    g.setColor(pal(COLOR.label));
+    g.drawString(row.hour || "--:--", 4, ry + 2);
 
-    var line = (row.hour || "--:--") + "  " +
-               pad2(row.cloud !== null ? row.cloud : "--") + "%  " +
-               windVal + "  " +
-               pad2(row.precip !== null ? row.precip : "--") + "%  " +
-               pad2(row.humidity !== null ? row.humidity : "--") + "%";
-    g.drawString(line, 4, ry + 2);
+    // Cloud % — colour coded
+    g.setColor(pal(cloudColor(row.cloud)));
+    g.drawString(row.cloud !== null ? pad2(row.cloud) + "%" : "--% ", 52, ry + 2);
+
+    // Seeing 0–5 (0=Terrible, 5=Excellent) — green/yellow/red
+    var see = row.seeing;
+    var seeCol = see === null   ? COLOR.dim  :
+                 see >= 4       ? COLOR.good :
+                 see >= 2       ? COLOR.warn : COLOR.bad;
+    g.setColor(pal(seeCol));
+    g.drawString(see !== null ? Math.round(see) + "/5" : " --", 100, ry + 2);
+
+    // Transparency (lower = better; <=10 excellent, <=18 average, else poor)
+    var trns = row.transparency;
+    var trnsCol = trns === null ? COLOR.dim  :
+                  trns <= 10   ? COLOR.good :
+                  trns <= 18   ? COLOR.warn : COLOR.bad;
+    g.setColor(pal(trnsCol));
+    g.drawString(trns !== null ? "" + Math.round(trns) : "--", 138, ry + 2);
   }
 
   // Bottom bar
@@ -425,6 +435,55 @@ setWatch(function() {
   menuRef = E.showMenu({
     "": { title: "AstroWatch", back: startClock },
     "< Back":        function() { startClock(); },
+    "Show Log": function() {
+      var lines = require("Storage").readJSON("astroclk.log.json", 1) || [];
+      var txt = lines.length ? lines.join("\n") : "(empty)";
+      E.showScroller({
+        h: 16, c: lines.length || 1,
+        draw: function(i, r) {
+          g.setColor(1,1,1).fillRect(r.x,r.y,r.x+r.w,r.y+r.h);
+          g.setColor(0,0,0).setFont("6x8").drawString(lines[i]||"(empty)",r.x+2,r.y+4);
+        },
+        select: function() { E.showMenu(menuRef); }
+      });
+    },
+    "Clear Log": function() {
+      require("Storage").erase("astroclk.log.json");
+      E.showAlert("Log cleared").then(function() { E.showMenu(menuRef); });
+    },
+    "Test HTTP": function() {
+      if (typeof Bangle.http !== "function") {
+        E.showAlert("Bangle.http\nnot available").then(function() { E.showMenu(menuRef); });
+        return;
+      }
+      E.showMessage("Testing...");
+      Bangle.http("https://httpbin.org/get", { timeout: 20000 }).then(function(r) {
+        var s = r && r.resp ? r.resp.slice(0, 60) : JSON.stringify(r).slice(0, 60);
+        E.showAlert("OK:\n" + s).then(function() { E.showMenu(menuRef); });
+      }).catch(function(e) {
+        E.showAlert("FAIL:\n" + e).then(function() { E.showMenu(menuRef); });
+      });
+    },
+    "Test Meteo": function() {
+      if (typeof Bangle.http !== "function") {
+        E.showAlert("Bangle.http\nnot available").then(function() { E.showMenu(menuRef); });
+        return;
+      }
+      var loc = require("Storage").readJSON("mylocation.json", 1);
+      if (!loc || !loc.lat) {
+        loc = { lat: 40.7608, lon: -111.891 };
+        require("Storage").writeJSON("mylocation.json", loc);
+      }
+      E.showMessage("Testing meteo...");
+      var url = "https://api.open-meteo.com/v1/forecast?latitude=" + loc.lat.toFixed(4) +
+        "&longitude=" + loc.lon.toFixed(4) + "&current=cloud_cover&forecast_days=1";
+      Bangle.http(url, { timeout: 20000 }).then(function(r) {
+        var s = r && r.resp ? r.resp.slice(0, 80) : JSON.stringify(r).slice(0, 80);
+        E.showAlert("Meteo OK:\n" + s).then(function() { E.showMenu(menuRef); });
+      }).catch(function(e) {
+        E.showAlert("Meteo FAIL:\n" + e).then(function() { E.showMenu(menuRef); });
+      });
+    },
     "Fetch Weather": function() {
       if (typeof Bangle.http !== "function") {
         E.showAlert("Android Integration\nnot installed").then(startClock);
@@ -435,9 +494,42 @@ setWatch(function() {
         return;
       }
       E.showMessage("Fetching...");
-      require("Storage").eval("astroclk.fetch.js").fetch(
-        function() { E.showAlert("Done!").then(startClock); },
-        function(e) { E.showAlert("Error:\n" + e).then(startClock); }
+      var _fetchDone = false;
+      var _watchdog = setTimeout(function() {
+        if (_fetchDone) return;
+        _fetchDone = true;
+        E.showAlert("Timed out").then(startClock);
+      }, 60000);
+      var _appLog = require("Storage").readJSON("astroclk.log.json", 1) || [];
+      _appLog.push("[app.js] starting eval");
+      require("Storage").writeJSON("astroclk.log.json", _appLog);
+      var _fetchMod;
+      try {
+        var exports = {};
+        eval(require("Storage").read("astroclk.fetch.js"));
+        _fetchMod = exports;
+        _appLog.push("[app.js] eval OK, fetch=" + typeof _fetchMod.fetch);
+        require("Storage").writeJSON("astroclk.log.json", _appLog);
+      } catch(e) {
+        _appLog.push("[app.js] eval THREW: " + e);
+        require("Storage").writeJSON("astroclk.log.json", _appLog);
+        if (!_fetchDone) { _fetchDone = true; clearTimeout(_watchdog); }
+        E.showAlert("eval error:\n" + e).then(startClock);
+        return;
+      }
+      _fetchMod.fetch(
+        function() {
+          if (_fetchDone) return;
+          _fetchDone = true;
+          clearTimeout(_watchdog);
+          E.showAlert("Done!").then(startClock);
+        },
+        function(e) {
+          if (_fetchDone) return;
+          _fetchDone = true;
+          clearTimeout(_watchdog);
+          E.showAlert("Error:\n" + e).then(startClock);
+        }
       );
     },
     "Red Mode": {

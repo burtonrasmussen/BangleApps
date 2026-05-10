@@ -1,21 +1,17 @@
 // astroclk.boot.js — runs at watch startup
 // Responsibilities:
 //   1. GPS time-sync (at most once per 24h)
-//   2. Start HRM polling interval
-//   3. Start barometer pressure sampling (every 15 min)
-//   4. Trigger opportunistic weather fetch when BLE connects
+//   2. Scheduled weather fetch at 05:00 and 15:00 (only when Gadgetbridge connected)
 
 (function() {
   var SETTINGS_FILE  = "astroclk.json";
   var SYNC_FILE      = "astroclk.sync.json";
-  var PRESSURE_FILE  = "astroclk.pressure.json";
-  var HRM_FILE       = "astroclk.hrm.json";
 
   var settings = require("Storage").readJSON(SETTINGS_FILE, 1) || {};
   var GPS_INTERVAL_H  = settings.gpsIntervalH  || 24;   // hours between GPS syncs
-  var HRM_INTERVAL_M  = settings.hrmIntervalM  || 5;    // minutes between HRM polls
-  var PRES_INTERVAL_M = 15;                              // pressure sample interval (fixed)
-  var PRES_MAX        = 12;                              // ring-buffer size (~3 h)
+
+  // Fetch windows: [hour, minuteOfDay]. Fetch runs at 05:00 and 15:00.
+  var FETCH_HOURS = [5, 15];
 
   // ── 1. GPS time sync ─────────────────────────────────────────────────────────
   var gpsRunning = false;
@@ -54,79 +50,32 @@
     Bangle.on("GPS", gpsListener);
   }
 
-  // ── 2. HRM polling ───────────────────────────────────────────────────────────
-  var hrmBuf = [];
-  var HRM_RAM_MAX = 288;
-  var hrmActive = false;
-  var hrmStopTimer = null;
-  var hrmListener = null;
-
-  function stopHrmNow() {
-    if (!hrmActive) return;
-    hrmActive = false;
-    if (hrmStopTimer) { clearTimeout(hrmStopTimer); hrmStopTimer = null; }
-    if (hrmListener) { Bangle.removeListener("HRM", hrmListener); hrmListener = null; }
-    Bangle.setHRMPower(0, "astroclk");
+  // ── 2. Scheduled weather fetch (05:00 and 15:00) ─────────────────────────────
+  function doFetch() {
+    if (typeof Bangle.http !== "function") return;       // Gadgetbridge not loaded
+    if (!NRF.getSecurityStatus || !NRF.getSecurityStatus().connected) return; // not connected
+    try { var exports = {}; eval(require("Storage").read("astroclk.fetch.js")); exports.fetch(null, null); } catch(e) {}
   }
 
-  function doHrmPoll() {
-    if (hrmActive) return;
-    hrmActive = true;
-    Bangle.setHRMPower(1, "astroclk");
-    hrmStopTimer = setTimeout(function() {
-      stopHrmNow();
-    }, 15000); // give up after 15 s
-    hrmListener = function(hrm) {
-      if (!hrm.bpm || hrm.bpm <= 0 || hrm.confidence < 50) return;
-      var bpm = hrm.bpm;
-      stopHrmNow();
-      var entry = { t: Math.floor(Date.now() / 1000), bpm: bpm };
-      hrmBuf.push(entry);
-      if (hrmBuf.length > HRM_RAM_MAX) hrmBuf.shift();
-      global._astroclkBPM = bpm;
-    };
-    Bangle.on("HRM", hrmListener);
+  // Returns ms until the next occurrence of the given hour (local time).
+  function msUntilHour(targetHour) {
+    var now = new Date();
+    var next = new Date(now.getFullYear(), now.getMonth(), now.getDate(), targetHour, 0, 0, 0);
+    if (next.getTime() <= now.getTime()) next.setDate(next.getDate() + 1);
+    return next.getTime() - now.getTime();
   }
 
-  function startHRM() {
-    setTimeout(doHrmPoll, 60000); // first poll 60 s after boot — let GPS settle
-    setInterval(doHrmPoll, HRM_INTERVAL_M * 60 * 1000);
-    setInterval(function() {
-      if (hrmBuf.length === 0) return;
-      require("Storage").writeJSON(HRM_FILE, hrmBuf);
-    }, 60 * 60 * 1000);
-  }
-
-  // ── 3. Barometer pressure sampling ───────────────────────────────────────────
-  function samplePressure() {
-    var p = (typeof Bangle.getPressure === "function") ? Bangle.getPressure() : null;
-    if (!p || typeof p.then !== "function") return;
-    p.then(function(d) {
-      if (!d || !d.pressure) return;
-      var buf = require("Storage").readJSON(PRESSURE_FILE, 1) || [];
-      buf.push({ t: Math.floor(Date.now() / 1000), p: d.pressure });
-      if (buf.length > PRES_MAX) buf.shift();
-      require("Storage").writeJSON(PRESSURE_FILE, buf);
-    });
-  }
-
-  // ── 4. BLE-opportunistic weather fetch ───────────────────────────────────────
-  function tryFetch() {
-    var weather = require("Storage").readJSON("astroclk.weather.json", 1) || {};
-    var ageH = (Date.now() - (weather.fetchedAt || 0)) / 3600000;
-    if (ageH < 20) return; // already fresh
-    if (typeof Bangle.http !== "function") return; // android boot not loaded yet
-    if (!NRF.getSecurityStatus || !NRF.getSecurityStatus().connected) return;
-    require("Storage").eval("astroclk.fetch.js").fetch(null, null);
+  // Schedule a recurring daily alarm at targetHour.
+  function scheduleDailyFetch(targetHour) {
+    setTimeout(function fire() {
+      doFetch();
+      setTimeout(fire, 24 * 60 * 60 * 1000); // repeat every 24 h
+    }, msUntilHour(targetHour));
   }
 
   maybeGpsSync();
-  startHRM();
-  samplePressure();
-  setInterval(samplePressure, PRES_INTERVAL_M * 60 * 1000);
 
-  NRF.on("connect", function() {
-    setTimeout(tryFetch, 3000);
-  });
-  setTimeout(tryFetch, 5000);
+  for (var i = 0; i < FETCH_HOURS.length; i++) {
+    scheduleDailyFetch(FETCH_HOURS[i]);
+  }
 })();
