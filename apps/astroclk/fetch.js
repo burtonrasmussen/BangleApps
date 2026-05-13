@@ -53,7 +53,7 @@ function parseJson(ev, what) {
 // Open-Notify is HTTP-only; Bangle/Gadgetbridge requires HTTPS — wrap via raw proxy.
 function issProxyUrl(lat, lon) {
   var q = "http://api.open-notify.org/iss-pass.json" +
-    "?lat=" + lat.toFixed(4) + "&lon=" + lon.toFixed(4) + "&n=5";
+    "?lat=" + lat.toFixed(4) + "&lon=" + lon.toFixed(4) + "&n=12";
   return "https://api.allorigins.win/raw?url=" + encodeURIComponent(q);
 }
 
@@ -103,8 +103,9 @@ exports.fetch = function(onDone, onError) {
     log("SunCalc loaded");
     var now  = new Date();
     var times = SunCalc.getTimes(now, lat, lon);
-    var dusk  = times.astronomicalDusk  || times.dusk;
-    var dawn  = SunCalc.getTimes(new Date(now.getTime() + 86400000), lat, lon).astronomicalDawn
+    var dusk  = times.night        || times.nauticalDusk || times.dusk;
+    var dawn  = SunCalc.getTimes(new Date(now.getTime() + 86400000), lat, lon).nightEnd
+                || SunCalc.getTimes(new Date(now.getTime() + 86400000), lat, lon).nauticalDawn
                 || SunCalc.getTimes(new Date(now.getTime() + 86400000), lat, lon).dawn;
     duskMs = dusk ? dusk.getTime() : now.getTime();
     dawnMs = dawn ? dawn.getTime() : duskMs + 8 * 3600000;
@@ -205,7 +206,7 @@ function _fetchAstrospheric(lat, lon, key, duskMs, dawnMs, onDone, onError) {
   }, 55000);
 
   log("astro POST body-len=" + body.length);
-  E.showMessage("Astrospheric...");
+  E.showMessage("1/2 Astrospheric...");
   Bangle.http(url, opts).then(function(resp) {
     if (_done) return; _done = true; clearTimeout(_wd);
     var rawStr = (resp && resp.resp) ? resp.resp : "";
@@ -218,17 +219,41 @@ function _fetchAstrospheric(lat, lon, key, duskMs, dawnMs, onDone, onError) {
     try { hourly = _parseAstrosphericRaw(rawStr, duskMs, dawnMs); rawStr = null; }
     catch(e) { log("ERROR parse: " + e); if (onError) onError("" + e); return; }
     log("trimmed hours=" + hourly.length);
-    var result = {
-      fetchedAt:        Date.now(),
-      provider:         "astrospheric",
-      hourly:           hourly,
-      cloudAtDusk:      hourly.length ? hourly[0].cloud : null,
-      creditsUsedToday: credits,
-      iss:              null
-    };
-    require("Storage").writeJSON("astroclk.weather.json", result);
-    log("DONE");
-    if (onDone) onDone(result);
+
+    // Step 2: ISS passes (same proxy as Open-Meteo path)
+    var issUrl = issProxyUrl(lat, lon);
+    log("calling Bangle.http ISS");
+    E.showMessage("2/2 ISS...");
+    Bangle.http(issUrl, HTTP_OPTS).then(function(resp2) {
+      var issData = null;
+      try { issData = parseJson(resp2, "ISS"); } catch(e) { log("ISS parse err: " + e); }
+      var issPass = _findIssPass(issData, duskMs / 1000, dawnMs / 1000);
+      log("ISS pass=" + (issPass ? issPass.risetime : "none"));
+      var result = {
+        fetchedAt:        Date.now(),
+        provider:         "astrospheric",
+        hourly:           hourly,
+        cloudAtDusk:      hourly.length ? hourly[0].cloud : null,
+        creditsUsedToday: credits,
+        iss:              issPass
+      };
+      require("Storage").writeJSON("astroclk.weather.json", result);
+      log("DONE");
+      if (onDone) onDone(result);
+    }).catch(function(e) {
+      log("ISS fetch failed: " + e + " — saving without ISS");
+      var result = {
+        fetchedAt:        Date.now(),
+        provider:         "astrospheric",
+        hourly:           hourly,
+        cloudAtDusk:      hourly.length ? hourly[0].cloud : null,
+        creditsUsedToday: credits,
+        iss:              null
+      };
+      require("Storage").writeJSON("astroclk.weather.json", result);
+      log("DONE (no ISS)");
+      if (onDone) onDone(result);
+    });
   }).catch(function(e) {
     if (_done) return; _done = true; clearTimeout(_wd);
     log("ERROR http Astrospheric: " + e);
