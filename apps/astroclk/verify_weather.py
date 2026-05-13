@@ -22,10 +22,6 @@ LAT  = 40.7608
 LON  = -111.891
 CITY = "Salt Lake City"
 
-# Weather provider: "openmeteo" (free) or "astrospheric" (Pro — needs API key)
-PROVIDER = "openmeteo"
-# Your Astrospheric API key — do NOT commit this to version control.
-ASTROSPHERIC_KEY = "49127ACC9AD52E6D09D069C37819CC28F5FCA6766A0710454175402E5A0D2FB44EE9C743"
 # ─────────────────────────────────────────────────────────────────────────────
 
 def fetch(url: str) -> dict:
@@ -95,90 +91,6 @@ def _simple_astro_night(lat: float, lon: float):
     # Dawn is next day
     dawn_local = utc_to_local(dawn_utc) + datetime.timedelta(days=1)
     return dusk_local, dawn_local
-
-
-def fetch_astrospheric(lat: float, lon: float, api_key: str) -> dict:
-    """POST to Astrospheric GetForecastData_V1. Returns raw JSON."""
-    url  = "https://astrosphericpublicaccess.azurewebsites.net/api/GetForecastData_V1"
-    body = {"Latitude": lat, "Longitude": lon, "APIKey": api_key}
-    print(f"  POST {url}")
-    r = requests.post(url, json=body, timeout=30)
-    r.raise_for_status()
-    data = r.json()
-    if "Error" in data:
-        raise RuntimeError(f"Astrospheric API error: {data['Error']}")
-    print(f"  Credits used today: {data.get('APICreditUsedToday', '?')}")
-    return data
-
-
-def _astro_val(arr, i):
-    """Extract scalar from Astrospheric HourValue.
-    Format: {"Value": {"ValueColor": "#...", "ActualValue": N}, "HourOffset": M}"""
-    if not arr or i >= len(arr):
-        return None
-    v = arr[i]
-    if v is None:
-        return None
-    if isinstance(v, dict):
-        inner = v.get("Value")
-        if isinstance(inner, dict):
-            return inner.get("ActualValue")  # nested {ValueColor, ActualValue}
-        return inner  # plain number under "Value" (older API format)
-    return v  # bare number
-
-
-def trim_astrospheric_to_night(data: dict, dusk: datetime.datetime, dawn: datetime.datetime) -> list:
-    """Mirror _trimAstrospheric() from fetch.js.
-    Wind: m/s → km/h.  Humidity: derived from temp+dewpoint (Magnus)."""
-    utc_start = data.get("UTCStartTime")
-    if not utc_start:
-        return []
-    # UTCStartTime has Z suffix — parse unambiguously as UTC
-    import dateutil.parser
-    # Parse as UTC and strip tzinfo so all comparisons are naive-UTC
-    start_dt = dateutil.parser.parse(utc_start).replace(tzinfo=None)
-
-    dusk_cmp = dusk.astimezone(datetime.timezone.utc).replace(tzinfo=None) if dusk.tzinfo else dusk
-    dawn_cmp = dawn.astimezone(datetime.timezone.utc).replace(tzinfo=None) if dawn.tzinfo else dawn
-
-    rows = []
-    for i in range(81):
-        dt = start_dt + datetime.timedelta(hours=i)
-        if dt < dusk_cmp or dt > dawn_cmp:
-            continue
-
-        T  = _astro_val(data.get("RDPS_Temperature"), i)   # Kelvin
-        Td = _astro_val(data.get("RDPS_DewPoint"), i)      # Kelvin
-        hum = None
-        if T is not None and Td is not None:
-            Tc  = T  - 273.15
-            Tdc = Td - 273.15
-            hum = round(100 * math.exp(17.62*Tdc/(243.12+Tdc)) /
-                              math.exp(17.62*Tc /(243.12+Tc)))
-            hum = max(0, min(100, hum))
-
-        w = _astro_val(data.get("RDPS_WindVelocity"), i)  # m/s
-
-        # Cloud cover — average all available models (GFS/NAM may be None for some regions)
-        cloud_rdps = _astro_val(data.get("RDPS_CloudCover"), i)
-        cloud_gfs  = _astro_val(data.get("GFS_CloudCover"), i)
-        cloud_nam  = _astro_val(data.get("NAM_CloudCover"), i)
-        cc_vals    = [v for v in [cloud_rdps, cloud_gfs, cloud_nam] if v is not None]
-        cloud_avg  = int(round(sum(cc_vals) / len(cc_vals))) if cc_vals else None
-
-        rows.append({
-            "dt":           dt,
-            "cloud":        cloud_avg,   # average of available models (matches what watch stores)
-            "cloud_rdps":   cloud_rdps,
-            "cloud_gfs":    cloud_gfs,
-            "cloud_nam":    cloud_nam,
-            "wind":         round(w * 3.6, 1) if w is not None else None,  # km/h
-            "precip":       None,
-            "humidity":     hum,
-            "seeing":       _astro_val(data.get("Astrospheric_Seeing"), i),       # 0-5
-            "transparency": _astro_val(data.get("Astrospheric_Transparency"), i), # lower=better
-        })
-    return rows
 
 
 def fetch_open_meteo(lat: float, lon: float) -> dict:
@@ -324,12 +236,10 @@ def print_summary(rows: list, iss_tonight: list, dusk, dawn):
         return
 
     has_seeing = any(r.get("seeing") is not None for r in rows)
-    is_estimated = PROVIDER != "astrospheric"
     seeing_words = {0: "Terrible", 1: "Bad", 2: "Poor", 3: "Average", 4: "Good", 5: "Excellent"}
+    est_note = " (estimated from wind+humidity)"
 
     if has_seeing:
-        # Show astronomy columns — real values (Astrospheric) or estimated (Open-Meteo)
-        est_note = " (estimated from wind+humidity)" if is_estimated else ""
         hdr = f"  {'Time':<7} {'Cloud%':>7} {'Seeing'+est_note:<{14+len(est_note)}} {'Transp':>6}"
         print(hdr)
         print("  " + "-" * (38 + len(est_note)))
@@ -593,265 +503,53 @@ def plot(rows: list, iss_tonight: list, dusk, dawn):
     plt.show()  # opens interactive window
 
 
-def plot_astrospheric(rows: list, dusk, dawn, credits="?"):
-    """Dark-themed dashboard for Astrospheric Pro data.
-    Shows cloud cover (per model + average), seeing (0-5), and transparency.
-    """
-    try:
-        import matplotlib.pyplot as plt
-        import matplotlib.dates as mdates
-        import matplotlib.gridspec as gridspec
-        import matplotlib.patches as mpatches
-    except ImportError:
-        print("matplotlib not installed — skipping plot")
-        return
-
-    if not rows:
-        print("No night-window data to plot.")
-        return
-
-    BG     = "#0d1117"
-    FG     = "#e6edf3"
-    GRID   = "#21262d"
-    GOOD   = "#3fb950"
-    WARN   = "#d29922"
-    BAD    = "#f85149"
-    RDPS_C = "#4a9eff"
-    GFS_C  = "#e3b341"
-    NAM_C  = "#bc8cff"
-
-    plt.rcParams.update({
-        "figure.facecolor": BG, "axes.facecolor": BG,
-        "axes.edgecolor":   GRID, "axes.labelcolor": FG,
-        "xtick.color": FG, "ytick.color": FG,
-        "text.color":  FG, "grid.color":  GRID,
-    })
-
-    dusk_naive = dusk.replace(tzinfo=None)
-    dawn_naive = dawn.replace(tzinfo=None)
-
-    times        = [r["dt"]              for r in rows]
-    cloud_rdps   = [r.get("cloud_rdps")  for r in rows]
-    cloud_gfs    = [r.get("cloud_gfs")   for r in rows]
-    cloud_nam    = [r.get("cloud_nam")   for r in rows]
-    cloud_avg    = [r.get("cloud")       for r in rows]
-    seeing_vals  = [r.get("seeing")      for r in rows]
-    trans_vals   = [r.get("transparency") for r in rows]
-
-    has_gfs = any(v is not None for v in cloud_gfs)
-    has_nam = any(v is not None for v in cloud_nam)
-
-    t_start = times[0]  - datetime.timedelta(hours=0.5)
-    t_end   = times[-1] + datetime.timedelta(hours=1.5)
-    bar_w   = datetime.timedelta(hours=0.85)
-
-    fig = plt.figure(figsize=(13, 10), facecolor=BG)
-    fig.suptitle(
-        f"AstroWatch  —  Astrospheric Pro  |  {CITY}  ({credits} API credits used today)",
-        fontsize=15, fontweight="bold", color=FG, y=0.98
-    )
-
-    gs = gridspec.GridSpec(3, 2, figure=fig,
-                           left=0.07, right=0.97, top=0.91, bottom=0.08,
-                           hspace=0.65, wspace=0.35)
-
-    def setup_ax(ax, title, ylabel, ylim=None):
-        ax.set_title(title, fontsize=10, color=FG, pad=6)
-        ax.set_xlim(t_start, t_end)
-        if ylim:
-            ax.set_ylim(*ylim)
-        ax.set_ylabel(ylabel, fontsize=8, color=FG)
-        ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M"))
-        ax.xaxis.set_major_locator(mdates.HourLocator(interval=1))
-        ax.tick_params(axis="x", labelsize=7, rotation=45)
-        ax.tick_params(axis="y", labelsize=7)
-        ax.grid(axis="y", linestyle="--", alpha=0.3)
-        ax.spines["top"].set_visible(False)
-        ax.spines["right"].set_visible(False)
-
-    # ── Cloud cover (full-width top panel) ──────────────────────────────────
-    ax_cloud = fig.add_subplot(gs[0, :])
-    setup_ax(ax_cloud, "Cloud Cover  (lower = better for astronomy)", "Cloud %", (0, 105))
-    ax_cloud.axhspan(0,  25, alpha=0.08, color=GOOD)
-    ax_cloud.axhspan(25, 60, alpha=0.06, color=WARN)
-    ax_cloud.axhspan(60, 100, alpha=0.06, color=BAD)
-
-    if not has_gfs and not has_nam:
-        # Single model — colour bars by cloud value
-        for xi, yi in zip(times, cloud_rdps):
-            if yi is None:
-                continue
-            col = GOOD if yi <= 25 else WARN if yi <= 60 else BAD
-            ax_cloud.bar(xi, yi, width=bar_w, color=col, alpha=0.85,
-                         align="center", edgecolor=BG, linewidth=0.4)
-            ax_cloud.text(xi, yi + 1.5, f"{yi:.0f}",
-                          ha="center", va="bottom", fontsize=7, color=FG)
-        ax_cloud.text(0.01, 0.93, "RDPS model", transform=ax_cloud.transAxes,
-                      fontsize=8, color=RDPS_C, alpha=0.9)
-    else:
-        # Multiple models — grouped bars + average line
-        n = 1 + (1 if has_gfs else 0) + (1 if has_nam else 0)
-        w = datetime.timedelta(hours=0.65 / n)
-        groups = [(cloud_rdps, RDPS_C, "RDPS")]
-        if has_gfs:
-            groups.append((cloud_gfs, GFS_C, "GFS"))
-        if has_nam:
-            groups.append((cloud_nam, NAM_C, "NAM"))
-        for g_i, (vals, col, lbl) in enumerate(groups):
-            offset = datetime.timedelta(hours=(g_i - (n - 1) / 2) * 0.65 / n)
-            xs = [t + offset for t in times]
-            ys = [v if v is not None else 0 for v in vals]
-            ax_cloud.bar(xs, ys, width=w, color=col, alpha=0.75, align="center",
-                         edgecolor=BG, linewidth=0.3, label=lbl)
-        # Average overlay
-        avg_pts = [(t, v) for t, v in zip(times, cloud_avg) if v is not None]
-        if avg_pts:
-            ax_cloud.plot([t for t, _ in avg_pts], [v for _, v in avg_pts],
-                          color="#ffffff", linewidth=1.8, marker="o", markersize=4,
-                          linestyle="--", label="Avg", zorder=5)
-        ax_cloud.legend(loc="upper right", fontsize=7, facecolor="#21262d",
-                        edgecolor=GRID, labelcolor=FG, framealpha=0.85)
-
-    # ── Seeing (0–5 scale) ──────────────────────────────────────────────────
-    see_words  = {0: "Terrible", 1: "Bad", 2: "Poor", 3: "Average", 4: "Good", 5: "Excellent"}
-    see_colors = {0: BAD, 1: BAD, 2: BAD, 3: WARN, 4: GOOD, 5: GOOD}
-
-    ax_see = fig.add_subplot(gs[1, 0])
-    setup_ax(ax_see, "Seeing  (0 = Terrible … 5 = Excellent)", "Seeing (0–5)", (0, 5.8))
-    for xi, yi in zip(times, seeing_vals):
-        if yi is None:
-            continue
-        s = int(round(yi))
-        ax_see.bar(xi, yi, width=bar_w, color=see_colors.get(s, WARN), alpha=0.85,
-                   align="center", edgecolor=BG, linewidth=0.4)
-        ax_see.text(xi, yi + 0.1, see_words.get(s, str(s)),
-                    ha="center", va="bottom", fontsize=6, color=FG)
-    ax_see.set_yticks([0, 1, 2, 3, 4, 5])
-    ax_see.set_yticklabels(["0 Terrible", "1 Bad", "2 Poor",
-                             "3 Average", "4 Good", "5 Excellent"], fontsize=6)
-
-    # ── Transparency (lower = better) ────────────────────────────────────────
-    max_t = max((v for v in trans_vals if v is not None), default=20)
-    ax_trns = fig.add_subplot(gs[1, 1])
-    setup_ax(ax_trns, "Transparency  (lower = better)",
-             "Value (lower = better)", (0, max(max_t * 1.25, 15)))
-    for xi, yi in zip(times, trans_vals):
-        if yi is None:
-            continue
-        col = GOOD if yi <= 10 else GOOD if yi <= 15 else WARN if yi <= 20 else BAD
-        ax_trns.bar(xi, yi, width=bar_w, color=col, alpha=0.85,
-                    align="center", edgecolor=BG, linewidth=0.4)
-        ax_trns.text(xi, yi + max_t * 0.02, f"{yi:.1f}",
-                     ha="center", va="bottom", fontsize=6.5, color=FG)
-    for ref, col in [(10, GOOD), (15, GOOD), (20, WARN)]:
-        ax_trns.axhline(ref, color=col, linewidth=0.7, linestyle=":", alpha=0.55)
-
-    # ── Summary table ────────────────────────────────────────────────────────
-    ax_table = fig.add_subplot(gs[2, :])
-    ax_table.axis("off")
-
-    def trns_word(t):
-        if t is None:
-            return "n/a"
-        if t <= 10:
-            return f"{t:.1f} Excellent"
-        if t <= 15:
-            return f"{t:.1f} Good"
-        if t <= 20:
-            return f"{t:.1f} Average"
-        return f"{t:.1f} Poor"
-
-    if has_gfs or has_nam:
-        col_labels = ["Time", "Cloud Avg", "RDPS", "GFS", "NAM", "Seeing", "Transparency"]
-        table_data = [
-            [r["dt"].strftime("%H:%M"),
-             f"{r.get('cloud'):.0f}%"      if r.get("cloud")      is not None else "--",
-             f"{r.get('cloud_rdps'):.0f}%" if r.get("cloud_rdps") is not None else "--",
-             f"{r.get('cloud_gfs'):.0f}%"  if r.get("cloud_gfs")  is not None else "--",
-             f"{r.get('cloud_nam'):.0f}%"  if r.get("cloud_nam")  is not None else "--",
-             see_words.get(int(round(sv)), str(sv)) if (sv := r.get("seeing")) is not None else "--",
-             trns_word(r.get("transparency"))]
-            for r in rows
-        ]
-    else:
-        col_labels = ["Time", "Cloud (RDPS)", "Seeing", "Transparency"]
-        table_data = [
-            [r["dt"].strftime("%H:%M"),
-             f"{r.get('cloud'):.0f}%" if r.get("cloud") is not None else "--",
-             see_words.get(int(round(sv)), str(sv)) if (sv := r.get("seeing")) is not None else "--",
-             trns_word(r.get("transparency"))]
-            for r in rows
-        ]
-
-    tbl = ax_table.table(cellText=table_data, colLabels=col_labels,
-                         loc="center", cellLoc="center")
-    tbl.auto_set_font_size(False)
-    tbl.set_fontsize(8.5)
-    tbl.scale(1, 1.5)
-
-    for j in range(len(col_labels)):
-        tbl[0, j].set_facecolor("#21262d")
-        tbl[0, j].set_text_props(color=FG, fontweight="bold")
-
-    for row_i, r in enumerate(rows):
-        sv  = r.get("seeing")
-        tv  = r.get("transparency")
-        cv  = r.get("cloud") or 0
-        # Composite quality: cloud 0=best, seeing 5=best, transparency low=best
-        q = (100 - cv) * 0.5
-        if sv is not None:
-            q += (sv / 5.0) * 30
-        if tv is not None:
-            q += max(0, (20 - tv)) * 1.0
-        row_bg = "#1a3a1a" if q >= 65 else "#3a2e00" if q >= 40 else "#3a1a00"
-        for j in range(len(col_labels)):
-            tbl[row_i + 1, j].set_facecolor(row_bg)
-            tbl[row_i + 1, j].set_text_props(color=FG)
-
-    dusk_str = dusk_naive.strftime("%b %d  %H:%M")
-    dawn_str = dawn_naive.strftime("%H:%M")
-    ax_table.set_title(f"Night: {dusk_str} -> {dawn_str}",
-                       fontsize=9, color=FG, pad=8, loc="left")
-
-    plt.savefig("astroclk_astro_forecast.png", dpi=150, facecolor=BG)
-    print("  Saved astroclk_astro_forecast.png")
-    plt.show()
-
-
 def main():
-    print(f"\nAstroWatch Weather Verifier — {CITY} ({LAT}, {LON})")
-    print(f"Provider: {PROVIDER}\n")
+    print(f"\nAstroWatch Weather Verifier — {CITY} ({LAT}, {LON})\n")
 
     print("Computing astronomical night window...")
     dusk, dawn = get_astro_night(LAT, LON)
     print(f"  Dusk: {dusk}  ->  Dawn: {dawn}\n")
 
-    if PROVIDER == "astrospheric":
-        if not ASTROSPHERIC_KEY:
-            raise SystemExit("Set ASTROSPHERIC_KEY at the top of verify_weather.py")
-        print("Fetching Astrospheric Pro forecast...")
-        raw         = fetch_astrospheric(LAT, LON, ASTROSPHERIC_KEY)
-        rows        = trim_astrospheric_to_night(raw, dusk, dawn)
-        print("Fetching ISS pass times...")
-        iss_passes  = fetch_iss(LAT, LON)
-        iss_tonight = find_iss_passes(iss_passes, dusk, dawn)
-    else:
-        print("Fetching Open-Meteo hourly forecast...")
-        raw         = fetch_open_meteo(LAT, LON)
-        print("Fetching ISS pass times...")
-        iss_passes  = fetch_iss(LAT, LON)
-        rows        = trim_to_night(raw, dusk, dawn)
-        iss_tonight = find_iss_passes(iss_passes, dusk, dawn)
+    print("Fetching Open-Meteo hourly forecast...")
+    raw         = fetch_open_meteo(LAT, LON)
+    print("Fetching ISS pass times...")
+    iss_passes  = fetch_iss(LAT, LON)
+    rows        = trim_to_night(raw, dusk, dawn)
+    iss_tonight = find_iss_passes(iss_passes, dusk, dawn)
 
     print_summary(rows, iss_tonight, dusk, dawn)
-    if PROVIDER == "astrospheric":
-        plot_astrospheric(rows, dusk, dawn, credits=raw.get("APICreditUsedToday", "?"))
+
+    # ── ISS fact-check ──────────────────────────────────────────────────────
+    print("ISS fact-check (all passes ≥10° alt, next 48h):")
+    if iss_passes:
+        dusk_ts = dusk.timestamp()
+        dawn_ts = dawn.timestamp()
+        for p in iss_passes:
+            rt  = p["risetime"]
+            dur = p["duration"]
+            lt  = datetime.datetime.fromtimestamp(rt).strftime("%Y-%m-%d %H:%M")
+            in_night = dusk_ts <= rt <= dawn_ts
+            tag = "  ← TONIGHT (watch stores this)" if (in_night and p is iss_tonight[0] if iss_tonight else False) else (
+                  "  ← tonight window" if in_night else "")
+            print(f"  {lt}  {dur:4d}s{tag}")
     else:
-        plot(rows, iss_tonight, dusk, dawn)
+        print("  No passes computed (skyfield may not be installed — pip install skyfield)")
+    # Cross-check against stored astroclk_raw_night.json if it exists
+    try:
+        with open("astroclk_raw_night.json") as fj:
+            stored = json.load(fj)
+        sp = stored.get("iss_passes") or []
+        if sp:
+            st = datetime.datetime.fromtimestamp(sp[0]["risetime"]).strftime("%H:%M")
+            print(f"  Last saved to watch:  {st}  {sp[0]['duration']}s  (from previous run)")
+    except FileNotFoundError:
+        pass
+    print()
+
+    plot(rows, iss_tonight, dusk, dawn)
 
     with open("astroclk_raw_night.json", "w") as f:
         json.dump({
-            "provider":   PROVIDER,
             "dusk":       str(dusk),
             "dawn":       str(dawn),
             "hourly":     rows,
