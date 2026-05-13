@@ -211,16 +211,20 @@ function _fetchAstrospheric(lat, lon, key, duskMs, dawnMs, onDone, onError) {
     var rawStr = (resp && resp.resp) ? resp.resp : "";
     log("astro resp len=" + rawStr.length);
     if (!rawStr) { log("ERROR: empty resp"); if (onError) onError("empty resp"); return; }
+    // Extract credit usage before clearing rawStr (response field APICreditUsedToday)
+    var credits = _numField(rawStr, "APICreditUsedToday");
+    if (credits !== null) log("credits used today=" + credits);
     var hourly;
     try { hourly = _parseAstrosphericRaw(rawStr, duskMs, dawnMs); rawStr = null; }
     catch(e) { log("ERROR parse: " + e); if (onError) onError("" + e); return; }
     log("trimmed hours=" + hourly.length);
     var result = {
-      fetchedAt:   Date.now(),
-      provider:    "astrospheric",
-      hourly:      hourly,
-      cloudAtDusk: hourly.length ? hourly[0].cloud : null,
-      iss:         null
+      fetchedAt:        Date.now(),
+      provider:         "astrospheric",
+      hourly:           hourly,
+      cloudAtDusk:      hourly.length ? hourly[0].cloud : null,
+      creditsUsedToday: credits,
+      iss:              null
     };
     require("Storage").writeJSON("astroclk.weather.json", result);
     log("DONE");
@@ -246,6 +250,21 @@ function _strField(str, key) {
   i++;
   var e = str.indexOf('"', i);
   return e < 0 ? null : str.slice(i, e);
+}
+
+// Extract an unquoted numeric value for a named field from a raw JSON string.
+function _numField(str, key) {
+  var k = '"' + key + '"';
+  var i = str.indexOf(k);
+  if (i < 0) return null;
+  i = str.indexOf(':', i + k.length);
+  if (i < 0) return null;
+  i++;
+  while (i < str.length && str[i] === ' ') i++;
+  var e = i;
+  while (e < str.length && str[e] !== ',' && str[e] !== '}' && str[e] !== ']') e++;
+  var v = parseFloat(str.slice(i, e));
+  return isNaN(v) ? null : v;
 }
 
 // Parse Astrospheric response using indexOf-only extraction.
@@ -337,12 +356,12 @@ function _parseAstrosphericRaw(rawStr, duskMs, dawnMs) {
     var dt = new Date(tMs);
     result.push({
       hour:         ("0"+dt.getHours()).slice(-2)+":"+("0"+dt.getMinutes()).slice(-2),
-      cloud:        clouds ? clouds[i] : null,
+      cloud:        clouds ? Math.round(clouds[i])         : null,
       wind:         (w !== null && !isNaN(w)) ? Math.round(w * 3.6 * 10) / 10 : null,
       precip:       null,
       humidity:     hum,
-      seeing:       seeing ? seeing[i] : null,
-      transparency: trans  ? trans[i]  : null
+      seeing:       seeing ? Math.round(seeing[i] * 10) / 10 : null,
+      transparency: trans  ? Math.round(trans[i])          : null
     });
   }
   return result;

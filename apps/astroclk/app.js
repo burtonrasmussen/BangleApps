@@ -388,7 +388,12 @@ function drawF2() {
   g.setFontAlign(0, -1);
   if (weather.fetchedAt) {
     var ageH = Math.round((Date.now() - weather.fetchedAt) / 3600000);
-    g.drawString("fetched " + ageH + "h ago", W / 2, by);
+    var footerStr = "fetched " + ageH + "h ago";
+    if (weather.provider === "astrospheric" &&
+        weather.creditsUsedToday !== null && weather.creditsUsedToday !== undefined) {
+      footerStr += " " + weather.creditsUsedToday + "c";
+    }
+    g.drawString(footerStr, W / 2, by);
   } else {
     g.drawString("no data cached", W / 2, by);
   }
