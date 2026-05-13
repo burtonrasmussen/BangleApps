@@ -151,7 +151,12 @@ exports.fetch = function(onDone, onError) {
       try { issData = parseJson(resp2, "ISS"); } catch(e) { log("ISS parse err: " + e); }
 
       var issPass = _findIssPass(issData, duskMs / 1000, dawnMs / 1000);
-      log("ISS pass=" + (issPass ? issPass.risetime : "none"));
+      if (issPass) {
+        var rt = new Date(issPass.risetime * 1000);
+        log("ISS pass=" + rt.toISOString().slice(0,16).replace("T"," ") + " local (" + issPass.duration + "s)");
+      } else {
+        log("ISS pass=none");
+      }
 
       var result = {
         fetchedAt:   Date.now(),
@@ -228,7 +233,12 @@ function _fetchAstrospheric(lat, lon, key, duskMs, dawnMs, onDone, onError) {
       var issData = null;
       try { issData = parseJson(resp2, "ISS"); } catch(e) { log("ISS parse err: " + e); }
       var issPass = _findIssPass(issData, duskMs / 1000, dawnMs / 1000);
-      log("ISS pass=" + (issPass ? issPass.risetime : "none"));
+      if (issPass) {
+        var rt = new Date(issPass.risetime * 1000);
+        log("ISS pass=" + rt.toISOString().slice(0,16).replace("T"," ") + " local (" + issPass.duration + "s)");
+      } else {
+        log("ISS pass=none");
+      }
       var result = {
         fetchedAt:        Date.now(),
         provider:         "astrospheric",
