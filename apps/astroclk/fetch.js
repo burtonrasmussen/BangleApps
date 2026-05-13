@@ -143,10 +143,11 @@ exports.fetch = function(onDone, onError) {
 
     // --- Step 2: ISS passes ---
     var issUrl = issProxyUrl(lat, lon);
-    log("calling Bangle.http ISS");
+    log("ISS url=" + issUrl);
     E.showMessage("2/2 ISS...");
     Bangle.http(issUrl, HTTP_OPTS).then(function(resp2) {
       log("ISS resp len=" + (resp2 && resp2.resp ? resp2.resp.length : typeof resp2));
+      if (resp2 && resp2.status) log("ISS http status=" + resp2.status);
       var issData = null;
       try { issData = parseJson(resp2, "ISS"); } catch(e) { log("ISS parse err: " + e); }
 
@@ -169,7 +170,8 @@ exports.fetch = function(onDone, onError) {
       if (onDone) onDone(result);
 
     }).catch(function(e) {
-      log("ISS fetch failed: " + e + " — saving without ISS");
+      var eStr = (typeof e === "object") ? JSON.stringify(e) : "" + e;
+      log("ISS fetch failed: " + eStr);
       var result = {
         fetchedAt:   Date.now(),
         hourly:      hourly,
@@ -227,10 +229,11 @@ function _fetchAstrospheric(lat, lon, key, duskMs, dawnMs, onDone, onError) {
 
     // Step 2: ISS passes (same proxy as Open-Meteo path)
     var issUrl = issProxyUrl(lat, lon);
-    log("calling Bangle.http ISS");
+    log("ISS url=" + issUrl);
     E.showMessage("2/2 ISS...");
     Bangle.http(issUrl, HTTP_OPTS).then(function(resp2) {
       var issData = null;
+      if (resp2 && resp2.status) log("ISS http status=" + resp2.status);
       try { issData = parseJson(resp2, "ISS"); } catch(e) { log("ISS parse err: " + e); }
       var issPass = _findIssPass(issData, duskMs / 1000, dawnMs / 1000);
       if (issPass) {
@@ -251,7 +254,8 @@ function _fetchAstrospheric(lat, lon, key, duskMs, dawnMs, onDone, onError) {
       log("DONE");
       if (onDone) onDone(result);
     }).catch(function(e) {
-      log("ISS fetch failed: " + e + " — saving without ISS");
+      var eStr = (typeof e === "object") ? JSON.stringify(e) : "" + e;
+      log("ISS fetch failed: " + eStr);
       var result = {
         fetchedAt:        Date.now(),
         provider:         "astrospheric",
