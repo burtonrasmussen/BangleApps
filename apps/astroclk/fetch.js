@@ -97,6 +97,12 @@ exports.fetch = function(onDone, onError) {
     require("Storage").writeJSON("astroclk.json", cfg);
     log("wrote default Astrospheric key to astroclk.json");
   }
+  if (!n2yoKey) {
+    n2yoKey = "ABY96A-S8DK3U-KG3SLS-5QT0";
+    cfg.n2yoKey = n2yoKey;
+    require("Storage").writeJSON("astroclk.json", cfg);
+    log("wrote default n2yo key to astroclk.json");
+  }
   log("provider=" + provider);
 
   var duskMs, dawnMs;
