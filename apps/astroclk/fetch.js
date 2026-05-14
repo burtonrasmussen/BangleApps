@@ -55,7 +55,7 @@ function parseJson(ev, what) {
 // Store it as n2yoKey in astroclk.json.
 function issN2yoUrl(lat, lon, key) {
   return "https://api.n2yo.com/rest/v1/satellite/visualpasses/25544/" +
-    lat.toFixed(4) + "/" + lon.toFixed(4) + "/0/2/60/&apiKey=" + key;
+    lat.toFixed(4) + "/" + lon.toFixed(4) + "/0/2/60?apiKey=" + key;
 }
 
 exports.fetch = function(onDone, onError) {
@@ -126,7 +126,7 @@ exports.fetch = function(onDone, onError) {
 
   // Branch: Astrospheric Pro or free Open-Meteo
   if (provider === "astrospheric" && astroKey) {
-    _fetchAstrospheric(lat, lon, astroKey, duskMs, dawnMs, onDone, onError);
+    _fetchAstrospheric(lat, lon, astroKey, n2yoKey, duskMs, dawnMs, onDone, onError);
     return;
   }
 
@@ -213,7 +213,7 @@ exports.fetch = function(onDone, onError) {
 // --- Helpers ---
 
 // Astrospheric Pro: POST GetForecastData_V1, trim to night, save result.
-function _fetchAstrospheric(lat, lon, key, duskMs, dawnMs, onDone, onError) {
+function _fetchAstrospheric(lat, lon, key, n2yoKey, duskMs, dawnMs, onDone, onError) {
   var url  = "https://astrosphericpublicaccess.azurewebsites.net/api/GetForecastData_V1";
   var body = JSON.stringify({ Latitude: lat, Longitude: lon, APIKey: key });
   var opts = {
