@@ -50,11 +50,12 @@ function parseJson(ev, what) {
   catch (e) { throw what + ": bad JSON (" + s.slice(0, 40) + ")"; }
 }
 
-// Open-Notify is HTTP-only; Bangle/Gadgetbridge requires HTTPS — wrap via raw proxy.
-function issProxyUrl(lat, lon) {
-  var q = "http://api.open-notify.org/iss-pass.json" +
-    "?lat=" + lat.toFixed(4) + "&lon=" + lon.toFixed(4) + "&n=12";
-  return "https://api.allorigins.win/raw?url=" + encodeURIComponent(q);
+// n2yo.com visual passes — HTTPS direct, free tier (1000 req/hr), no proxy needed.
+// Register free at https://www.n2yo.com/login/register/ to get an API key.
+// Store it as n2yoKey in astroclk.json.
+function issN2yoUrl(lat, lon, key) {
+  return "https://api.n2yo.com/rest/v1/satellite/visualpasses/25544/" +
+    lat.toFixed(4) + "/" + lon.toFixed(4) + "/0/2/60/&apiKey=" + key;
 }
 
 exports.fetch = function(onDone, onError) {
@@ -86,6 +87,7 @@ exports.fetch = function(onDone, onError) {
   var cfg = require("Storage").readJSON("astroclk.json", 1) || {};
   var provider  = cfg.weatherProvider  || "openmeteo";
   var astroKey  = cfg.astrosphericKey  || "";
+  var n2yoKey   = cfg.n2yoKey           || "";
 
   // If using Astrospheric but no key stored yet, write the default key.
   // Users publishing the app should replace this with their own key or clear it.
@@ -142,7 +144,20 @@ exports.fetch = function(onDone, onError) {
     log("trimmed hours=" + hourly.length);
 
     // --- Step 2: ISS passes ---
-    var issUrl = issProxyUrl(lat, lon);
+    if (!n2yoKey) {
+      log("ISS skipped: no n2yoKey in astroclk.json");
+      var result = {
+        fetchedAt:   Date.now(),
+        hourly:      hourly,
+        cloudAtDusk: hourly.length ? hourly[0].cloud : null,
+        iss:         null
+      };
+      require("Storage").writeJSON("astroclk.weather.json", result);
+      log("DONE (no ISS key)");
+      if (onDone) onDone(result);
+      return;
+    }
+    var issUrl = issN2yoUrl(lat, lon, n2yoKey);
     log("ISS url=" + issUrl);
     E.showMessage("2/2 ISS...");
     Bangle.http(issUrl, HTTP_OPTS).then(function(resp2) {
@@ -227,8 +242,23 @@ function _fetchAstrospheric(lat, lon, key, duskMs, dawnMs, onDone, onError) {
     catch(e) { log("ERROR parse: " + e); if (onError) onError("" + e); return; }
     log("trimmed hours=" + hourly.length);
 
-    // Step 2: ISS passes (same proxy as Open-Meteo path)
-    var issUrl = issProxyUrl(lat, lon);
+    // Step 2: ISS passes (n2yo.com)
+    if (!n2yoKey) {
+      log("ISS skipped: no n2yoKey in astroclk.json");
+      var result2 = {
+        fetchedAt:        Date.now(),
+        provider:         "astrospheric",
+        hourly:           hourly,
+        cloudAtDusk:      hourly.length ? hourly[0].cloud : null,
+        creditsUsedToday: credits,
+        iss:              null
+      };
+      require("Storage").writeJSON("astroclk.weather.json", result2);
+      log("DONE (no ISS key)");
+      if (onDone) onDone(result2);
+      return;
+    }
+    var issUrl = issN2yoUrl(lat, lon, n2yoKey);
     log("ISS url=" + issUrl);
     E.showMessage("2/2 ISS...");
     Bangle.http(issUrl, HTTP_OPTS).then(function(resp2) {
@@ -453,11 +483,12 @@ function _trimMeteo(data, duskMs, dawnMs) {
 }
 
 // Find the first ISS pass whose risetime falls inside tonight [duskS, dawnS] (unix seconds)
+// Handles n2yo response: { passes: [{ startUTC, duration, maxEl, ... }] }
 function _findIssPass(data, duskS, dawnS) {
-  if (!data || !data.response) return null;
-  var passes = data.response;
+  if (!data || !data.passes) return null;
+  var passes = data.passes;
   for (var i = 0; i < passes.length; i++) {
-    var rt = passes[i].risetime;
+    var rt = passes[i].startUTC;
     if (rt >= duskS && rt <= dawnS) {
       return { risetime: rt, duration: passes[i].duration };
     }
