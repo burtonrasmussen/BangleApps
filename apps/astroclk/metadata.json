@@ -2,7 +2,7 @@
   "id": "astroclk",
   "name": "AstroWatch",
   "shortName": "AstroWatch",
-  "version": "0.02",
+  "version": "0.03",
   "description": "Astronomy-focused watch face with moon phase, sky conditions, and weather forecast. Fetches weather data from phone via Gadgetbridge.",
   "icon": "app.png",
   "type": "clock",
@@ -12,14 +12,14 @@
   "readme": "README.md",
   "dependencies": {
     "mylocation": "app",
-    "android": "app",
-    "FontVGA16": "module"
+    "android": "app"
   },
   "storage": [
     {"name": "astroclk.app.js",       "url": "app.js"},
     {"name": "astroclk.boot.js",      "url": "boot.js"},
     {"name": "astroclk.settings.js",  "url": "settings.js"},
     {"name": "astroclk.fetch.js",     "url": "fetch.js"},
+    {"name": "FontVGA16",             "url": "FontVGA16.js"},
     {"name": "astroclk.img",          "url": "app-icon.js", "evaluate": true}
   ],
   "data": [

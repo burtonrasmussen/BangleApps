@@ -2,6 +2,7 @@
 screenshot.png
 
 # Debug/verification artifacts from verify_weather.py
+dusk-debug.png
 astroclk_night_forecast.png
 astroclk_raw_night.json
 astroclk_astro_forecast.png

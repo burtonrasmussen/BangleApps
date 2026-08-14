@@ -1,0 +1,8 @@
+0.01: New app
+0.02: Astronomy clock face: moon phase, dark/dusk times, night cloud forecast,
+      ISS pass, weather fetch via Gadgetbridge (Astrospheric or Open-Meteo)
+0.03: Long-press BTN1 (0.6s) opens the system launcher, short press still opens
+      the AstroWatch menu
+      Show app version in the menu title
+      Provide FontVGA16 as an app file instead of declaring a module dependency
+      that nothing satisfies (app install failed)

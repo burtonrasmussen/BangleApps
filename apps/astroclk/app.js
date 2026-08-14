@@ -7,9 +7,11 @@
 // Navigation:
 //   Wrist-raise / tap → wake, show F1
 //   Swipe left/right  → toggle F1 ↔ F2
-//   Long BTN1         → side menu
+//   Short BTN1        → side menu
+//   Long BTN1 (0.6s)  → system launcher
 
 // ── Constants & defaults ──────────────────────────────────────────────────────
+var APP_VERSION = "0.03"; // keep in step with metadata.json
 var W = g.getWidth();    // 176
 var H = g.getHeight();   // 176
 
@@ -414,7 +416,7 @@ function onSwipe(dir) {
 var inMenu = false;
 var menuRef = null;
 
-// Long-press BTN1 → side menu
+// Short BTN1 press → AstroWatch menu; long press → system launcher
 function stopClock() {
   if (clockInterval) { clearInterval(clockInterval); clockInterval = null; }
   Bangle.removeListener("swipe", onSwipe);
@@ -428,12 +430,23 @@ function startClock() {
   clockInterval = setInterval(draw, 60000);
 }
 
-setWatch(function() {
+// Time the press ourselves rather than using e.lastTime: on the press edge that
+// field holds the previous release, so it reads as a multi-second "hold".
+var btnDownAt = 0;
+function onButton(e) {
+  if (e.state) { btnDownAt = Date.now(); return; } // pressed - just note when
+  if (!btnDownAt) return;                          // release without a press
+  var held = Date.now() - btnDownAt;
+  btnDownAt = 0;
+  if (held >= 600) {
+    Bangle.showLauncher(); // long press leaves AstroWatch for the app list
+    return;
+  }
   if (inMenu) return; // ignore if menu already open
   inMenu = true;
   stopClock();
   menuRef = E.showMenu({
-    "": { title: "AstroWatch", back: startClock },
+    "": { title: "AstroWatch " + APP_VERSION, back: startClock },
     "< Back":        function() { startClock(); },
     "12h Clock": {
       value: !!settings.use12h,
@@ -524,7 +537,8 @@ setWatch(function() {
       E.showAlert("Log cleared").then(function() { E.showMenu(menuRef); });
     }
 });
-}, BTN1, { repeat: true, edge: "falling", debounce: 50 });
+}
+setWatch(onButton, BTN1, { repeat: true, edge: "both", debounce: 50 });
 
 // ── Clock tick ────────────────────────────────────────────────────────────────
 
