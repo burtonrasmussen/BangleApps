@@ -7,7 +7,8 @@ if (window.location.host=="banglejs.com") {
     'This is the development Bangle.js App Loader - you can also try the <a href="https://banglejs.com/apps/">Official Version</a> for stable apps.';
 } else if (window.location.hostname==='localhost') {
   document.title += " [Local]";
-  Const.APPS_JSON_FILE = "apps.local.json";
+  // Bust Chromium cache so local metadata/version bumps show up immediately.
+  Const.APPS_JSON_FILE = "apps.local.json?ts=" + Date.now();
   document.getElementById("apploaderlinks").innerHTML =
     'This is your local Bangle.js App Loader - you can try the <a href="https://banglejs.com/apps/">Official Version</a> here.';
 } else {
