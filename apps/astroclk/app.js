@@ -6,12 +6,14 @@
 //
 // Navigation:
 //   Wrist-raise / tap → wake, show F1
-//   Swipe left/right  → toggle F1 ↔ F2
-//   Short BTN1        → side menu
-//   Long BTN1 (0.6s)  → system launcher
-
+//   Swipe Left (from F1)  → F2 hourly sky conditions table
+//   Swipe Right (from F1) → AstroWatch settings menu (Screen 3)
+//   Swipe Right (from F2) → Return to F1
+//   BTN1 on F1            → Bangle.js system launcher
+//   BTN1 on F2 / Menu     → Return to F1
+//
 // ── Constants & defaults ──────────────────────────────────────────────────────
-var APP_VERSION = "0.03"; // keep in step with metadata.json
+var APP_VERSION = "0.04"; // keep in step with metadata.json
 var W = g.getWidth();    // 176
 var H = g.getHeight();   // 176
 
@@ -407,47 +409,75 @@ function draw() {
   else              drawF2();
 }
 
-// Named so it can be removed while the menu is open
-function onSwipe(dir) {
-  screen = screen === 1 ? 2 : 1;
-  draw();
-}
-
 var inMenu = false;
-var menuRef = null;
+var drawTimeout;
 
-// Short BTN1 press → AstroWatch menu; long press → system launcher
 function stopClock() {
-  if (clockInterval) { clearInterval(clockInterval); clockInterval = null; }
-  Bangle.removeListener("swipe", onSwipe);
+  if (drawTimeout) { clearTimeout(drawTimeout); drawTimeout = undefined; }
 }
+
+function queueDraw() {
+  if (drawTimeout) clearTimeout(drawTimeout);
+  var now = new Date();
+  var msToNextMin = (60 - now.getSeconds()) * 1000 - now.getMilliseconds();
+  drawTimeout = setTimeout(function() {
+    drawTimeout = undefined;
+    draw();
+    queueDraw();
+  }, msToNextMin);
+}
+
 function startClock() {
   inMenu = false;
-  if (menuRef) { E.showMenu(); menuRef = null; }
-  if (clockInterval) return; // already running
-  Bangle.on("swipe", onSwipe);
+  E.showMenu(); // clear any active menu
+  stopClock();
+
+  Bangle.setUI({
+    mode: "custom",
+    clock: 1,
+    btn: function() {
+      if (screen === 2) {
+        // Return to main watch face from F2
+        screen = 1;
+        draw();
+      } else {
+        // Open system launcher from F1
+        Bangle.showLauncher();
+      }
+    },
+    swipe: function(lr, ud) {
+      if (screen === 1) {
+        if (lr === -1) {
+          // Swipe Left -> Screen 2 (detailed hourly sky table)
+          screen = 2;
+          draw();
+        } else if (lr === 1) {
+          // Swipe Right -> Screen 3 (AstroWatch settings menu)
+          openAstroMenu();
+        }
+      } else if (screen === 2) {
+        if (lr === 1) {
+          // Swipe Right -> Return to Screen 1
+          screen = 1;
+          draw();
+        }
+      }
+    },
+    remove: function() {
+      stopClock();
+    }
+  });
+
   draw();
-  clockInterval = setInterval(draw, 60000);
+  queueDraw();
 }
 
-// Time the press ourselves rather than using e.lastTime: on the press edge that
-// field holds the previous release, so it reads as a multi-second "hold".
-var btnDownAt = 0;
-function onButton(e) {
-  if (e.state) { btnDownAt = Date.now(); return; } // pressed - just note when
-  if (!btnDownAt) return;                          // release without a press
-  var held = Date.now() - btnDownAt;
-  btnDownAt = 0;
-  if (held >= 600) {
-    Bangle.showLauncher(); // long press leaves AstroWatch for the app list
-    return;
-  }
-  if (inMenu) return; // ignore if menu already open
+function openAstroMenu() {
   inMenu = true;
   stopClock();
-  menuRef = E.showMenu({
-    "": { title: "AstroWatch " + APP_VERSION, back: startClock },
-    "< Back":        function() { startClock(); },
+  E.showMenu({
+    "": { title: "AstroWatch " + APP_VERSION, back: function() { startClock(); } },
+    "< Back": function() { startClock(); },
     "12h Clock": {
       value: !!settings.use12h,
       onchange: function(v) {
@@ -475,11 +505,11 @@ function onButton(e) {
     },
     "Fetch Weather": function() {
       if (typeof Bangle.http !== "function") {
-        E.showAlert("Android Integration\nnot installed").then(startClock);
+        E.showAlert("Android Integration\nnot installed").then(openAstroMenu);
         return;
       }
       if (!NRF.getSecurityStatus || !NRF.getSecurityStatus().connected) {
-        E.showAlert("Bluetooth\nnot connected").then(startClock);
+        E.showAlert("Bluetooth\nnot connected").then(openAstroMenu);
         return;
       }
       E.showMessage("Fetching...");
@@ -487,7 +517,7 @@ function onButton(e) {
       var _watchdog = setTimeout(function() {
         if (_fetchDone) return;
         _fetchDone = true;
-        E.showAlert("Timed out").then(startClock);
+        E.showAlert("Timed out").then(openAstroMenu);
       }, 60000);
       var _appLog = require("Storage").readJSON("astroclk.log.json", 1) || [];
       _appLog.push("[app.js] starting eval");
@@ -503,7 +533,7 @@ function onButton(e) {
         _appLog.push("[app.js] eval THREW: " + e);
         require("Storage").writeJSON("astroclk.log.json", _appLog);
         if (!_fetchDone) { _fetchDone = true; clearTimeout(_watchdog); }
-        E.showAlert("eval error:\n" + e).then(startClock);
+        E.showAlert("eval error:\n" + e).then(openAstroMenu);
         return;
       }
       _fetchMod.fetch(
@@ -511,13 +541,13 @@ function onButton(e) {
           if (_fetchDone) return;
           _fetchDone = true;
           clearTimeout(_watchdog);
-          E.showAlert("Done!").then(startClock);
+          E.showAlert("Done!").then(function() { startClock(); });
         },
         function(e) {
           if (_fetchDone) return;
           _fetchDone = true;
           clearTimeout(_watchdog);
-          E.showAlert("Error:\n" + e).then(startClock);
+          E.showAlert("Error:\n" + e).then(openAstroMenu);
         }
       );
     },
@@ -525,30 +555,20 @@ function onButton(e) {
       var lines = require("Storage").readJSON("astroclk.log.json", 1) || [];
       E.showScroller({
         h: 16, c: lines.length || 1,
+        back: function() { openAstroMenu(); },
         draw: function(i, r) {
           g.setColor(1,1,1).fillRect(r.x,r.y,r.x+r.w,r.y+r.h);
           g.setColor(0,0,0).setFont("6x8").drawString(lines[i]||"(empty)",r.x+2,r.y+4);
         },
-        select: function() { E.showMenu(menuRef); }
+        select: function() { openAstroMenu(); }
       });
     },
     "Clear Log": function() {
       require("Storage").erase("astroclk.log.json");
-      E.showAlert("Log cleared").then(function() { E.showMenu(menuRef); });
+      E.showAlert("Log cleared").then(function() { openAstroMenu(); });
     }
-});
+  });
 }
-setWatch(onButton, BTN1, { repeat: true, edge: "both", debounce: 50 });
 
-// ── Clock tick ────────────────────────────────────────────────────────────────
-
-// Align first tick to the wall-clock minute boundary.
-// Use stopClock() before startClock() so the swipe listener is never double-registered.
-var now = new Date();
-var msToNextMin = (60 - now.getSeconds()) * 1000 - now.getMilliseconds();
-setTimeout(function() {
-  if (!inMenu) { stopClock(); startClock(); }
-}, msToNextMin);
-
-// Initial draw
+// Initial draw & start
 startClock();

@@ -7,8 +7,9 @@ Astronomy-focused watch face for Bangle.js 2. Purpose-built for amateur astronom
 | Screen | Access |
 |--------|--------|
 | **F1 — Main face** | Default / wrist-raise |
-| **F2 — Hourly conditions** | Swipe left or right |
-| **Menu** | Long-press BTN1 |
+| **F2 — Hourly conditions** | Swipe left from F1 (Swipe right to return) |
+| **F3 — Settings & Menu** | Swipe right from F1 |
+| **Bangle.js Launcher** | Physical button (BTN1) on F1 |
 
 ### F1 — Main Clock Face
 
@@ -41,7 +42,7 @@ Data is fetched from [Open-Meteo](https://open-meteo.com) (free, no API key requ
 | ISS passes tonight | Open-Notify API | Once per day |
 | Moon phase, rise/set, dusk/dawn | suncalc module (on-device) | Every minute |
 
-## Settings (Long-press BTN1 → menu, or via the Bangle.js App Loader)
+## Settings (Swipe Right from F1 → menu, or via Bangle App Settings)
 
 | Setting | Options |
 |---------|---------|
