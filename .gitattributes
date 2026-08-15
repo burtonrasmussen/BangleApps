@@ -1,0 +1,4 @@
+# Most files in this working tree ended up with CRLF endings, which made all
+# ~4200 upstream files show as modified and buried real changes in git status.
+# Normalise text to LF on commit and on checkout so diffs only show content.
+* text=auto eol=lf
