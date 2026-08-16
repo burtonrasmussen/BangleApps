@@ -13,6 +13,8 @@
       - Physical button (BTN1) returns to main face from settings menu or Screen 2
       - Wall-clock minute alignment via queueDraw
 0.05: Standalone "Sync Phone GPS" in AstroWatch menu and Settings.
-      Decoupled weather fetching with in-memory logging for rock-solid
-      Astrospheric and Open-Meteo updates in 2-3s without BLE packet collisions.
+      Decoupled weather fetching from GPS acquisition to eliminate timeouts.
+      App Loader diagnostics & configuration interface (interface.html).
+      Astrospheric reliability via Cloudflare slimming proxy with multi-model
+      cloud ensemble averaging (2s fetch speed over BLE).
 
