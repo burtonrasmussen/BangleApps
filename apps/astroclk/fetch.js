@@ -23,15 +23,31 @@
 //   }
 // }
 
-var HTTP_OPTS = { timeout: 45000 };
+var HTTP_OPTS = { timeout: 300000 };
 var LOG_FILE = "astroclk.log.json";
 
+function primeMtu() {
+  try {
+    var pad = "";
+    for (var i = 0; i < 13; i++) pad += "0123456789";
+    Bluetooth.println("// astroclk mtu " + pad);
+  } catch (e) {}
+}
+
+var _logs = [];
 function log(msg) {
   var entry = new Date().toISOString().slice(11,19) + " " + msg;
-  var lines = require("Storage").readJSON(LOG_FILE, 1) || [];
-  lines.push(entry);
-  if (lines.length > 20) lines = lines.slice(-20);
-  require("Storage").writeJSON(LOG_FILE, lines);
+  _logs.push(entry);
+  if (_logs.length > 25) _logs.shift();
+}
+
+function flushLogs() {
+  try {
+    var existing = require("Storage").readJSON(LOG_FILE, 1) || [];
+    var combined = existing.concat(_logs);
+    if (combined.length > 30) combined = combined.slice(-30);
+    require("Storage").writeJSON(LOG_FILE, combined);
+  } catch(e) {}
 }
 
 function httpText(ev) {
@@ -59,18 +75,29 @@ function issN2yoUrl(lat, lon, key) {
 }
 
 exports.fetch = function(onDone, onError) {
+  _logs = [];
   log("fetch() called");
+
+  function doneWithSuccess(res) {
+    flushLogs();
+    if (onDone) onDone(res);
+  }
+
+  function doneWithError(err) {
+    flushLogs();
+    if (onError) onError(err);
+  }
 
   if (typeof Bangle.http !== "function") {
     log("ERROR: Bangle.http not a function");
-    if (onError) onError("Android Integration app not loaded");
+    doneWithError("Android Integration app not loaded");
     return;
   }
   log("Bangle.http OK");
 
   if (!NRF.getSecurityStatus || !NRF.getSecurityStatus().connected) {
     log("ERROR: BT not connected");
-    if (onError) onError("Bluetooth not connected");
+    doneWithError("Bluetooth not connected");
     return;
   }
   log("BT connected");
@@ -85,23 +112,22 @@ exports.fetch = function(onDone, onError) {
   var lon = loc.lon;
 
   var cfg = require("Storage").readJSON("astroclk.json", 1) || {};
-  var provider  = cfg.weatherProvider  || "openmeteo";
+  var provider  = cfg.weatherProvider  || "astrospheric";
   var astroKey  = cfg.astrosphericKey  || "";
   var n2yoKey   = cfg.n2yoKey           || "";
 
   // If using Astrospheric but no key stored yet, write the default key.
-  // Users publishing the app should replace this with their own key or clear it.
   if (provider === "astrospheric" && !astroKey) {
     astroKey = "49127ACC9AD52E6D09D069C37819CC28F5FCA6766A0710454175402E5A0D2FB44EE9C743";
     cfg.astrosphericKey = astroKey;
     require("Storage").writeJSON("astroclk.json", cfg);
-    log("wrote default Astrospheric key to astroclk.json");
+    log("wrote default Astrospheric key");
   }
   if (!n2yoKey) {
     n2yoKey = "ABY96A-S8DK3U-KG3SLS-5QT0";
     cfg.n2yoKey = n2yoKey;
     require("Storage").writeJSON("astroclk.json", cfg);
-    log("wrote default n2yo key to astroclk.json");
+    log("wrote default n2yo key");
   }
   log("provider=" + provider);
 
@@ -120,13 +146,13 @@ exports.fetch = function(onDone, onError) {
     log("dusk=" + new Date(duskMs).toISOString().slice(11,16) + " dawn=" + new Date(dawnMs).toISOString().slice(11,16));
   } catch(e) {
     log("ERROR SunCalc: " + e);
-    if (onError) onError("SunCalc: " + e);
+    doneWithError("SunCalc: " + e);
     return;
   }
 
   // Branch: Astrospheric Pro or free Open-Meteo
   if (provider === "astrospheric" && astroKey) {
-    _fetchAstrospheric(lat, lon, astroKey, n2yoKey, duskMs, dawnMs, onDone, onError);
+    _fetchAstrospheric(lat, lon, astroKey, n2yoKey, duskMs, dawnMs, doneWithSuccess, doneWithError);
     return;
   }
 
@@ -143,7 +169,7 @@ exports.fetch = function(onDone, onError) {
     log("meteo resp len=" + (resp && resp.resp ? resp.resp.length : typeof resp));
     var meteoData;
     try { meteoData = parseJson(resp, "Meteo"); }
-    catch (e) { log("ERROR parse: " + e); if (onError) onError(e); return; }
+    catch (e) { log("ERROR parse: " + e); doneWithError(e); return; }
     log("meteo JSON OK");
 
     var hourly = _trimMeteo(meteoData, duskMs, dawnMs);
@@ -154,13 +180,14 @@ exports.fetch = function(onDone, onError) {
       log("ISS skipped: no n2yoKey in astroclk.json");
       var result = {
         fetchedAt:   Date.now(),
+        provider:    "openmeteo",
         hourly:      hourly,
         cloudAtDusk: hourly.length ? hourly[0].cloud : null,
         iss:         null
       };
       require("Storage").writeJSON("astroclk.weather.json", result);
       log("DONE (no ISS key)");
-      if (onDone) onDone(result);
+      doneWithSuccess(result);
       return;
     }
     var issUrl = issN2yoUrl(lat, lon, n2yoKey);
@@ -182,70 +209,63 @@ exports.fetch = function(onDone, onError) {
 
       var result = {
         fetchedAt:   Date.now(),
+        provider:    "openmeteo",
         hourly:      hourly,
         cloudAtDusk: hourly.length ? hourly[0].cloud : null,
         iss:         issPass
       };
       require("Storage").writeJSON("astroclk.weather.json", result);
       log("DONE");
-      if (onDone) onDone(result);
-
+      doneWithSuccess(result);
     }).catch(function(e) {
-      var eStr = (typeof e === "object") ? JSON.stringify(e) : "" + e;
-      log("ISS fetch failed: " + eStr);
+      log("ERROR ISS fetch: " + e);
       var result = {
         fetchedAt:   Date.now(),
+        provider:    "openmeteo",
         hourly:      hourly,
         cloudAtDusk: hourly.length ? hourly[0].cloud : null,
         iss:         null
       };
       require("Storage").writeJSON("astroclk.weather.json", result);
-      log("DONE (no ISS)");
-      if (onDone) onDone(result);
+      log("DONE (ISS failed)");
+      doneWithSuccess(result);
     });
-
   }).catch(function(e) {
-    log("ERROR http meteo: " + e);
-    if (onError) onError("Meteo fetch failed: " + e);
+    log("ERROR meteo fetch: " + e);
+    doneWithError("Meteo: " + e);
   });
 };
 
 // --- Helpers ---
 
-// Astrospheric Pro: POST GetForecastData_V1, trim to night, save result.
+// Astrospheric Pro via Slim Proxy:
 function _fetchAstrospheric(lat, lon, key, n2yoKey, duskMs, dawnMs, onDone, onError) {
-  var url  = "https://astrosphericpublicaccess.azurewebsites.net/api/GetForecastData_V1";
-  var body = JSON.stringify({ Latitude: lat, Longitude: lon, APIKey: key });
-  var opts = {
-    timeout: 50000,
-    method:  "POST",
-    headers: { "Content-Type": "application/json" },
-    body:    body
-  };
+  var cfg = require("Storage").readJSON("astroclk.json", 1) || {};
+  var proxyBase = (cfg.astroProxyUrl || "https://astrowatch-proxy.burton-astrowatch.workers.dev/astro").replace(/\/$/, "");
+  if (proxyBase.indexOf("/astro") < 0) proxyBase += "/astro";
 
-  // Local watchdog — Gadgetbridge occasionally silently drops POST requests
-  // without firing .catch(). After 55 s we give up regardless.
-  var _done = false;
-  var _wd = setTimeout(function() {
-    if (_done) return;
-    _done = true;
-    log("ERROR Astrospheric: local watchdog fired (no response after 55s)");
-    if (onError) onError("Astrospheric timed out");
-  }, 55000);
+  var tzOffset = new Date().getTimezoneOffset();
+  var url = proxyBase +
+    "?lat=" + lat.toFixed(4) +
+    "&lon=" + lon.toFixed(4) +
+    "&key=" + encodeURIComponent(key) +
+    "&dusk=" + duskMs +
+    "&dawn=" + dawnMs +
+    "&tz=" + tzOffset;
 
-  log("astro POST body-len=" + body.length);
+  log("calling astro proxy");
   E.showMessage("1/2 Astrospheric...");
-  Bangle.http(url, opts).then(function(resp) {
-    if (_done) return; _done = true; clearTimeout(_wd);
+  Bangle.http(url, { timeout: 30000 }).then(function(resp) {
     var rawStr = (resp && resp.resp) ? resp.resp : "";
     log("astro resp len=" + rawStr.length);
     if (!rawStr) { log("ERROR: empty resp"); if (onError) onError("empty resp"); return; }
-    // Extract credit usage before clearing rawStr (response field APICreditUsedToday)
-    var credits = _numField(rawStr, "APICreditUsedToday");
-    if (credits !== null) log("credits used today=" + credits);
-    var hourly;
-    try { hourly = _parseAstrosphericRaw(rawStr, duskMs, dawnMs); rawStr = null; }
-    catch(e) { log("ERROR parse: " + e); if (onError) onError("" + e); return; }
+    var data = null;
+    try { data = JSON.parse(rawStr); } catch(e) { log("ERROR parse: " + e); if (onError) onError("parse error"); return; }
+    if (data && data.error) { log("ERROR proxy: " + data.error); if (onError) onError(data.error); return; }
+
+    var hourly = (data && data.hourly) ? data.hourly : [];
+    var credits = data ? data.credits : null;
+    if (credits !== null && credits !== undefined) log("credits used=" + credits);
     log("trimmed hours=" + hourly.length);
 
     // Step 2: ISS passes (n2yo.com)
@@ -305,7 +325,6 @@ function _fetchAstrospheric(lat, lon, key, n2yoKey, duskMs, dawnMs, onDone, onEr
       if (onDone) onDone(result);
     });
   }).catch(function(e) {
-    if (_done) return; _done = true; clearTimeout(_wd);
     log("ERROR http Astrospheric: " + e);
     if (onError) onError("Astrospheric fetch failed: " + e);
   });

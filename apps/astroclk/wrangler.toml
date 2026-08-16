@@ -1,0 +1,6 @@
+name = "astrowatch-proxy"
+main = "cloudflare-worker.js"
+compatibility_date = "2024-01-01"
+
+[vars]
+# Optional default key or set per-request via query param ?key=...
