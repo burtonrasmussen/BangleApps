@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>AstroWatch Control & Diagnostics</title>
+    <link rel="stylesheet" href="../../css/spectre.min.css">
+    <link rel="stylesheet" href="../../css/spectre-icons.min.css">
+    <style>
+      body {
+        padding: 16px;
+        max-width: 900px;
+        margin: 0 auto;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      }
+      .panel-header {
+        font-weight: bold;
+        background: #f8f9fa;
+        padding: 10px 15px;
+        border-bottom: 1px solid #e9ecef;
+      }
+      .log-box {
+        background: #1e1e1e;
+        color: #d4d4d4;
+        font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+        font-size: 12px;
+        line-height: 1.45;
+        padding: 12px;
+        border-radius: 4px;
+        max-height: 380px;
+        overflow-y: auto;
+        white-space: pre-wrap;
+        word-break: break-all;
+        border: 1px solid #333;
+      }
+      .log-box .log-time { color: #569cd6; font-weight: bold; }
+      .log-box .log-err { color: #f48771; font-weight: bold; }
+      .log-box .log-ok { color: #4ec9b0; }
+      .status-pill {
+        display: inline-block;
+        padding: 2px 8px;
+        border-radius: 10px;
+        font-size: 11px;
+        font-weight: 600;
+      }
+      .status-ok { background: #e6ffed; color: #22863a; }
+      .status-warn { background: #fff5b1; color: #735c0f; }
+      .status-err { background: #ffeef0; color: #cb2431; }
+      .btn-bar { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+      .json-dump {
+        background: #f8f9fa;
+        border: 1px solid #e9ecef;
+        padding: 8px 12px;
+        font-family: monospace;
+        font-size: 12px;
+        border-radius: 4px;
+        max-height: 150px;
+        overflow-y: auto;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="columns">
+        <div class="column col-12">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+            <h3 style="margin: 0;">🔭 AstroWatch Diagnostics & Logs</h3>
+            <button class="btn btn-sm" onclick="Util.close()">Close</button>
+          </div>
+        </div>
+
+        <!-- 1. Logs Section -->
+        <div class="column col-12" style="margin-bottom: 20px;">
+          <div class="panel" style="border: 1px solid #e9ecef; border-radius: 4px;">
+            <div class="panel-header" style="display: flex; justify-content: space-between; align-items: center;">
+              <span>Watch Operation & Fetch Logs (<code>astroclk.log.json</code>)</span>
+              <span id="log-count" class="text-gray" style="font-size: 12px;">Loading...</span>
+            </div>
+            <div class="panel-body" style="padding: 12px;">
+              <div class="btn-bar">
+                <button id="btn-refresh-log" class="btn btn-primary btn-sm" onclick="loadLogs()">
+                  <i class="icon icon-refresh"></i> Refresh Logs
+                </button>
+                <button id="btn-copy-log" class="btn btn-sm" onclick="copyLogs()">
+                  <i class="icon icon-copy"></i> Copy to Clipboard
+                </button>
+                <button id="btn-clear-log" class="btn btn-sm text-error" onclick="clearLogs()">
+                  <i class="icon icon-delete"></i> Clear Watch Logs
+                </button>
+              </div>
+              <div id="log-content" class="log-box">Connecting to watch storage...</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 2. Location & State Inspection -->
+        <div class="column col-6 col-md-12" style="margin-bottom: 20px;">
+          <div class="panel" style="border: 1px solid #e9ecef; border-radius: 4px; height: 100%;">
+            <div class="panel-header">📍 Current Device Location & Cache</div>
+            <div class="panel-body" style="padding: 12px;">
+              <div style="margin-bottom: 10px;">
+                <strong>Location (<code>mylocation.json</code>):</strong>
+                <div id="loc-display" class="json-dump">Loading...</div>
+              </div>
+              <div>
+                <strong>Cached Weather (<code>astroclk.weather.json</code>):</strong>
+                <div id="weather-display" class="json-dump">Loading...</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 3. Configuration & API Keys -->
+        <div class="column col-6 col-md-12" style="margin-bottom: 20px;">
+          <div class="panel" style="border: 1px solid #e9ecef; border-radius: 4px; height: 100%;">
+            <div class="panel-header">⚙️ Configuration & API Keys (<code>astroclk.json</code>)</div>
+            <div class="panel-body" style="padding: 12px;">
+              <div class="form-group" style="margin-bottom: 10px;">
+                <label class="form-label" for="provider-select"><strong>Weather Provider:</strong></label>
+                <select id="provider-select" class="form-select select-sm">
+                  <option value="astrospheric">Astrospheric Pro</option>
+                  <option value="openmeteo">Open-Meteo (Free)</option>
+                </select>
+              </div>
+
+              <div class="form-group" style="margin-bottom: 10px;">
+                <label class="form-label" for="astrospheric-key"><strong>Astrospheric API Key:</strong></label>
+                <input id="astrospheric-key" class="form-input input-sm" type="text" placeholder="64-character hex key">
+              </div>
+
+              <div class="form-group" style="margin-bottom: 10px;">
+                <label class="form-label" for="astro-proxy-url"><strong>Astrospheric Proxy URL:</strong></label>
+                <input id="astro-proxy-url" class="form-input input-sm" type="text" placeholder="https://astrowatch-proxy.burton-astrowatch.workers.dev/astro">
+              </div>
+
+              <div class="form-group" style="margin-bottom: 15px;">
+                <label class="form-label" for="n2yo-key"><strong>N2YO ISS API Key:</strong></label>
+                <input id="n2yo-key" class="form-input input-sm" type="text" placeholder="N2YO key for satellite passes">
+              </div>
+
+              <button id="btn-save-cfg" class="btn btn-success btn-sm" onclick="saveConfig()">
+                <i class="icon icon-check"></i> Save Settings to Watch
+              </button>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <script src="../../core/lib/interface.js"></script>
+    <script>
+      var rawLogLines = [];
+      var currentConfig = {};
+
+      function formatLogLine(line) {
+        if (!line) return "";
+        var isErr = line.indexOf("ERR") >= 0 || line.indexOf("failed") >= 0 || line.indexOf("Timeout") >= 0;
+        var isOk = line.indexOf("DONE") >= 0 || line.indexOf("OK") >= 0;
+        var timeMatch = line.match(/^(\d{2}:\d{2}:\d{2})\s(.*)$/);
+        if (timeMatch) {
+          var cls = isErr ? 'log-err' : (isOk ? 'log-ok' : '');
+          return `<span class="log-time">[${timeMatch[1]}]</span> <span class="${cls}">${escapeHtml(timeMatch[2])}</span>`;
+        }
+        return isErr ? `<span class="log-err">${escapeHtml(line)}</span>` : escapeHtml(line);
+      }
+
+      function escapeHtml(str) {
+        return (str || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      }
+
+      function loadLogs() {
+        var el = document.getElementById("log-content");
+        var countEl = document.getElementById("log-count");
+        el.innerHTML = "Reading logs from watch...";
+
+        Util.readStorageJSON("astroclk.log.json", function(data) {
+          rawLogLines = data || [];
+          if (!Array.isArray(rawLogLines) || rawLogLines.length === 0) {
+            el.innerHTML = "<span class='text-gray'>No log entries found on watch (astroclk.log.json is empty).</span>";
+            countEl.innerText = "0 entries";
+            return;
+          }
+          countEl.innerText = `${rawLogLines.length} entries`;
+          var html = rawLogLines.map(formatLogLine).join("\n");
+          el.innerHTML = html;
+          el.scrollTop = el.scrollHeight;
+        });
+      }
+
+      function copyLogs() {
+        if (!rawLogLines || rawLogLines.length === 0) {
+          alert("No logs to copy");
+          return;
+        }
+        var text = rawLogLines.join("\n");
+        navigator.clipboard.writeText(text).then(function() {
+          alert("Copied " + rawLogLines.length + " log lines to clipboard!");
+        }).catch(function(err) {
+          alert("Failed to copy: " + err);
+        });
+      }
+
+      function clearLogs() {
+        if (!confirm("Are you sure you want to clear the watch logs?")) return;
+        Util.showModal("Clearing logs...");
+        Util.eraseStorage("astroclk.log.json", function() {
+          Util.hideModal();
+          rawLogLines = [];
+          loadLogs();
+        });
+      }
+
+      function loadLocationAndState() {
+        Util.readStorageJSON("mylocation.json", function(loc) {
+          document.getElementById("loc-display").innerText = loc ? JSON.stringify(loc, null, 2) : "(none)";
+        });
+
+        Util.readStorageJSON("astroclk.weather.json", function(weather) {
+          document.getElementById("weather-display").innerText = weather ? JSON.stringify(weather, null, 2) : "(none)";
+        });
+
+        Util.readStorageJSON("astroclk.json", function(cfg) {
+          currentConfig = cfg || {};
+          document.getElementById("provider-select").value = currentConfig.weatherProvider || "astrospheric";
+          document.getElementById("astrospheric-key").value = currentConfig.astrosphericKey || "";
+          document.getElementById("astro-proxy-url").value = currentConfig.astroProxyUrl || "";
+          document.getElementById("n2yo-key").value = currentConfig.n2yoKey || "";
+        });
+      }
+
+      function saveConfig() {
+        currentConfig.weatherProvider = document.getElementById("provider-select").value;
+        currentConfig.astrosphericKey = document.getElementById("astrospheric-key").value.trim();
+        currentConfig.astroProxyUrl = document.getElementById("astro-proxy-url").value.trim();
+        currentConfig.n2yoKey = document.getElementById("n2yo-key").value.trim();
+
+        Util.showModal("Saving settings to watch...");
+        Util.writeStorage("astroclk.json", JSON.stringify(currentConfig), function() {
+          Util.hideModal();
+          alert("Settings saved successfully to watch!");
+        });
+      }
+
+      function onInit() {
+        console.log("AstroWatch interface initialized");
+        loadLogs();
+        loadLocationAndState();
+      }
+    </script>
+  </body>
+</html>
