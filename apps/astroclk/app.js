@@ -13,7 +13,7 @@
 //   BTN1 on F2 / Menu     → Return to F1
 //
 // ── Constants & defaults ──────────────────────────────────────────────────────
-var APP_VERSION = "0.04"; // keep in step with metadata.json
+var APP_VERSION = "0.05"; // keep in step with metadata.json
 var W = g.getWidth();    // 176
 var H = g.getHeight();   // 176
 
@@ -478,31 +478,6 @@ function openAstroMenu() {
   E.showMenu({
     "": { title: "AstroWatch " + APP_VERSION, back: function() { startClock(); } },
     "< Back": function() { startClock(); },
-    "12h Clock": {
-      value: !!settings.use12h,
-      onchange: function(v) {
-        settings.use12h = v;
-        require("Storage").writeJSON(SETTINGS_FILE, settings);
-      }
-    },
-    "Wind Unit": {
-      value: settings.windUnit === "mph" ? 0 : 1,
-      min: 0, max: 1,
-      format: function(v) { return v === 0 ? "mph" : "km/h"; },
-      onchange: function(v) {
-        settings.windUnit = v === 0 ? "mph" : "kmh";
-        require("Storage").writeJSON(SETTINGS_FILE, settings);
-      }
-    },
-    "Weather Source": {
-      value: settings.weatherProvider === "astrospheric" ? 1 : 0,
-      min: 0, max: 1,
-      format: function(v) { return v ? "Astrospheric" : "OpenMeteo"; },
-      onchange: function(v) {
-        settings.weatherProvider = v ? "astrospheric" : "openmeteo";
-        require("Storage").writeJSON(SETTINGS_FILE, settings);
-      }
-    },
     "Fetch Weather": function() {
       if (typeof Bangle.http !== "function") {
         E.showAlert("Android Integration\nnot installed").then(openAstroMenu);
@@ -518,20 +493,13 @@ function openAstroMenu() {
         if (_fetchDone) return;
         _fetchDone = true;
         E.showAlert("Timed out").then(openAstroMenu);
-      }, 60000);
-      var _appLog = require("Storage").readJSON("astroclk.log.json", 1) || [];
-      _appLog.push("[app.js] starting eval");
-      require("Storage").writeJSON("astroclk.log.json", _appLog);
+      }, 330000);
       var _fetchMod;
       try {
         var exports = {};
         eval(require("Storage").read("astroclk.fetch.js"));
         _fetchMod = exports;
-        _appLog.push("[app.js] eval OK, fetch=" + typeof _fetchMod.fetch);
-        require("Storage").writeJSON("astroclk.log.json", _appLog);
       } catch(e) {
-        _appLog.push("[app.js] eval THREW: " + e);
-        require("Storage").writeJSON("astroclk.log.json", _appLog);
         if (!_fetchDone) { _fetchDone = true; clearTimeout(_watchdog); }
         E.showAlert("eval error:\n" + e).then(openAstroMenu);
         return;
@@ -550,6 +518,88 @@ function openAstroMenu() {
           E.showAlert("Error:\n" + e).then(openAstroMenu);
         }
       );
+    },
+    "Sync Phone GPS": function() {
+      if (!NRF.getSecurityStatus || !NRF.getSecurityStatus().connected) {
+        E.showAlert("Bluetooth\nnot connected").then(openAstroMenu);
+        return;
+      }
+      E.showMessage("Requesting\nPhone GPS...");
+      var done = false;
+      var timer;
+      var gbHandler, gpsHandler;
+
+      function cleanup() {
+        if (timer) { clearTimeout(timer); timer = null; }
+        if (gbHandler) { Bangle.removeListener("GB", gbHandler); gbHandler = null; }
+        if (gpsHandler) { Bangle.removeListener("GPS", gpsHandler); gpsHandler = null; }
+        if (typeof Bluetooth !== "undefined" && Bluetooth.println) {
+          Bluetooth.println("");
+          Bluetooth.println(JSON.stringify({ t: "gps_power", status: false }));
+        }
+      }
+
+      function handleFix(fix) {
+        if (done) return;
+        if (!fix || typeof fix.lat !== "number" || typeof fix.lon !== "number" || isNaN(fix.lat) || isNaN(fix.lon)) return;
+        done = true;
+        cleanup();
+        var loc = { lat: fix.lat, lon: fix.lon, location: "Phone GPS", time: Date.now() };
+        require("Storage").writeJSON("mylocation.json", loc);
+        Bangle.buzz(120);
+        E.showAlert("Location Saved:\n" + fix.lat.toFixed(3) + ", " + fix.lon.toFixed(3)).then(openAstroMenu);
+      }
+
+      gbHandler = function(e) {
+        if (e && e.t === "gps" && typeof e.lat === "number" && typeof e.lon === "number") {
+          handleFix(e);
+        }
+      };
+      gpsHandler = function(fix) {
+        if (fix && (fix.fix || fix.lat) && typeof fix.lat === "number" && typeof fix.lon === "number") {
+          handleFix(fix);
+        }
+      };
+
+      Bangle.on("GB", gbHandler);
+      Bangle.on("GPS", gpsHandler);
+
+      if (typeof Bluetooth !== "undefined" && Bluetooth.println) {
+        Bluetooth.println("");
+        Bluetooth.println(JSON.stringify({ t: "gps_power", status: true }));
+      }
+
+      timer = setTimeout(function() {
+        if (done) return;
+        done = true;
+        cleanup();
+        E.showAlert("Phone GPS Timeout\nCheck phone GPS/app").then(openAstroMenu);
+      }, 10000);
+    },
+    "Weather Source": {
+      value: settings.weatherProvider === "openmeteo" ? 1 : 0,
+      min: 0, max: 1,
+      format: function(v) { return v ? "OpenMeteo" : "Astrospheric"; },
+      onchange: function(v) {
+        settings.weatherProvider = v ? "openmeteo" : "astrospheric";
+        require("Storage").writeJSON(SETTINGS_FILE, settings);
+      }
+    },
+    "12h Clock": {
+      value: !!settings.use12h,
+      onchange: function(v) {
+        settings.use12h = v;
+        require("Storage").writeJSON(SETTINGS_FILE, settings);
+      }
+    },
+    "Wind Unit": {
+      value: settings.windUnit === "mph" ? 0 : 1,
+      min: 0, max: 1,
+      format: function(v) { return v === 0 ? "mph" : "km/h"; },
+      onchange: function(v) {
+        settings.windUnit = v === 0 ? "mph" : "kmh";
+        require("Storage").writeJSON(SETTINGS_FILE, settings);
+      }
     },
     "Show Log": function() {
       var lines = require("Storage").readJSON("astroclk.log.json", 1) || [];

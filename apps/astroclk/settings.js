@@ -106,6 +106,63 @@
         E.showAlert("GPS synced!").then(back);
       });
     },
+    "Sync Phone GPS": function() {
+      if (!NRF.getSecurityStatus || !NRF.getSecurityStatus().connected) {
+        E.showAlert("Bluetooth\nnot connected").then(function() { E.showMenu(menu); });
+        return;
+      }
+      E.showMessage("Requesting\nPhone GPS...");
+      var done = false;
+      var timer;
+      var gbHandler, gpsHandler;
+
+      function cleanup() {
+        if (timer) { clearTimeout(timer); timer = null; }
+        if (gbHandler) { Bangle.removeListener("GB", gbHandler); gbHandler = null; }
+        if (gpsHandler) { Bangle.removeListener("GPS", gpsHandler); gpsHandler = null; }
+        if (typeof Bluetooth !== "undefined" && Bluetooth.println) {
+          Bluetooth.println("");
+          Bluetooth.println(JSON.stringify({ t: "gps_power", status: false }));
+        }
+      }
+
+      function handleFix(fix) {
+        if (done) return;
+        if (!fix || typeof fix.lat !== "number" || typeof fix.lon !== "number" || isNaN(fix.lat) || isNaN(fix.lon)) return;
+        done = true;
+        cleanup();
+        var loc = { lat: fix.lat, lon: fix.lon, location: "Phone GPS", time: Date.now() };
+        require("Storage").writeJSON("mylocation.json", loc);
+        Bangle.buzz(120);
+        E.showAlert("Location Saved:\n" + fix.lat.toFixed(3) + ", " + fix.lon.toFixed(3)).then(function() { E.showMenu(menu); });
+      }
+
+      gbHandler = function(e) {
+        if (e && e.t === "gps" && typeof e.lat === "number" && typeof e.lon === "number") {
+          handleFix(e);
+        }
+      };
+      gpsHandler = function(fix) {
+        if (fix && (fix.fix || fix.lat) && typeof fix.lat === "number" && typeof fix.lon === "number") {
+          handleFix(fix);
+        }
+      };
+
+      Bangle.on("GB", gbHandler);
+      Bangle.on("GPS", gpsHandler);
+
+      if (typeof Bluetooth !== "undefined" && Bluetooth.println) {
+        Bluetooth.println("");
+        Bluetooth.println(JSON.stringify({ t: "gps_power", status: true }));
+      }
+
+      timer = setTimeout(function() {
+        if (done) return;
+        done = true;
+        cleanup();
+        E.showAlert("Phone GPS Timeout\nCheck phone GPS/app").then(function() { E.showMenu(menu); });
+      }, 10000);
+    },
     "Fetch Weather Now": function() {
       if (typeof Bangle.http !== "function") {
         E.showAlert("Android Integration\nnot installed").then(function() { E.showMenu(menu); });
