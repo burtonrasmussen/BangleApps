@@ -15,6 +15,6 @@
 0.05: Standalone "Sync Phone GPS" in AstroWatch menu and Settings.
       Decoupled weather fetching from GPS acquisition to eliminate timeouts.
       App Loader diagnostics & configuration interface (interface.html).
-      Astrospheric reliability via Cloudflare slimming proxy with multi-model
-      cloud ensemble averaging (2s fetch speed over BLE).
-
+0.06: Direct Astrospheric v2 API integration (GetForecastData) with native
+      variable & duration filtering (4.8 KB payload, 0 external proxies needed).
+      Display remaining API budget fetches dynamically on Screen 2 footer.

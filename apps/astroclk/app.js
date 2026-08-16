@@ -393,9 +393,14 @@ function drawF2() {
   if (weather.fetchedAt) {
     var ageH = Math.round((Date.now() - weather.fetchedAt) / 3600000);
     var footerStr = "fetched " + ageH + "h ago";
-    if (weather.provider === "astrospheric" &&
-        weather.creditsUsedToday !== null && weather.creditsUsedToday !== undefined) {
-      footerStr += " " + weather.creditsUsedToday + "c";
+    if (weather.provider === "astrospheric") {
+      if (weather.creditsRemaining !== null && weather.creditsRemaining !== undefined) {
+        var cost = weather.creditCost || 110;
+        var fetchesLeft = Math.floor(weather.creditsRemaining / cost);
+        footerStr += " | " + fetchesLeft + " left";
+      } else if (weather.creditsUsedToday !== null && weather.creditsUsedToday !== undefined) {
+        footerStr += " " + weather.creditsUsedToday + "c";
+      }
     }
     g.drawString(footerStr, W / 2, by);
   } else {

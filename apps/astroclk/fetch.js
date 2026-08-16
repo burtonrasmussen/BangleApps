@@ -238,46 +238,102 @@ exports.fetch = function(onDone, onError) {
 
 // --- Helpers ---
 
-// Astrospheric Pro via Slim Proxy:
+// Astrospheric Pro via official v2 API (direct, no proxy needed)
 function _fetchAstrospheric(lat, lon, key, n2yoKey, duskMs, dawnMs, onDone, onError) {
-  var cfg = require("Storage").readJSON("astroclk.json", 1) || {};
-  var proxyBase = (cfg.astroProxyUrl || "https://astrowatch-proxy.burton-astrowatch.workers.dev/astro").replace(/\/$/, "");
-  if (proxyBase.indexOf("/astro") < 0) proxyBase += "/astro";
+  var url = "https://v2-api-public.astrospheric.com/api/GetForecastData";
+  var body = JSON.stringify({
+    APIKey: key.trim(),
+    Latitude: parseFloat(lat.toFixed(4)),
+    Longitude: parseFloat(lon.toFixed(4)),
+    Variables: ["Cloud", "Seeing", "Transparency", "Wind", "Temperature", "DewPoint"],
+    ForecastLength: 26
+  });
+  var opts = {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: body,
+    timeout: 30000
+  };
 
-  var tzOffset = new Date().getTimezoneOffset();
-  var url = proxyBase +
-    "?lat=" + lat.toFixed(4) +
-    "&lon=" + lon.toFixed(4) +
-    "&key=" + encodeURIComponent(key) +
-    "&dusk=" + duskMs +
-    "&dawn=" + dawnMs +
-    "&tz=" + tzOffset;
-
-  log("calling astro proxy");
+  log("calling Astrospheric v2 API");
   E.showMessage("1/2 Astrospheric...");
-  Bangle.http(url, { timeout: 30000 }).then(function(resp) {
+  Bangle.http(url, opts).then(function(resp) {
     var rawStr = (resp && resp.resp) ? resp.resp : "";
     log("astro resp len=" + rawStr.length);
     if (!rawStr) { log("ERROR: empty resp"); if (onError) onError("empty resp"); return; }
     var data = null;
     try { data = JSON.parse(rawStr); } catch(e) { log("ERROR parse: " + e); if (onError) onError("parse error"); return; }
-    if (data && data.error) { log("ERROR proxy: " + data.error); if (onError) onError(data.error); return; }
+    if (data && data.ErrorInfo) { log("ERROR API: " + data.ErrorInfo); if (onError) onError(data.ErrorInfo); return; }
 
-    var hourly = (data && data.hourly) ? data.hourly : [];
-    var credits = data ? data.credits : null;
-    if (credits !== null && credits !== undefined) log("credits used=" + credits);
+    var list = (data && data.HourlyForecast) ? data.HourlyForecast : [];
+    var creditsRemaining = data ? data.APICreditsRemaining : null;
+    var creditCost = (data && data.APICreditCostOfCall) ? data.APICreditCostOfCall : 110;
+    if (creditsRemaining !== null && creditsRemaining !== undefined) log("credits remaining=" + creditsRemaining + " cost=" + creditCost);
+
+    function parseUtcIso(s) {
+      if (!s) return 0;
+      var p = s.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+      if (p) {
+        return Date.UTC(parseInt(p[1],10), parseInt(p[2],10)-1, parseInt(p[3],10), parseInt(p[4],10), parseInt(p[5],10), 0);
+      }
+      return new Date(s).getTime() || 0;
+    }
+
+    var hourly = [];
+    var allHours = [];
+    for (var i = 0; i < list.length; i++) {
+      var item = list[i];
+      var tMs = parseUtcIso(item.UTCForecastHour);
+
+      var c = (item.Cloud && item.Cloud.ActualValue !== undefined) ? item.Cloud.ActualValue : null;
+      var s = (item.Seeing && item.Seeing.ActualValue !== undefined) ? item.Seeing.ActualValue : null;
+      var tr = (item.Transparency && item.Transparency.ActualValue !== undefined) ? item.Transparency.ActualValue : null;
+      var w = (item.Wind && item.Wind.ActualValue !== undefined) ? item.Wind.ActualValue : null;
+      var tempK = (item.Temperature && item.Temperature.ActualValue !== undefined) ? item.Temperature.ActualValue : null;
+      var dewK = (item.DewPoint && item.DewPoint.ActualValue !== undefined) ? item.DewPoint.ActualValue : null;
+
+      var hum = null;
+      if (tempK !== null && dewK !== null) {
+        var tc = tempK - 273.15;
+        var tdc = dewK - 273.15;
+        hum = Math.round(100 * Math.exp(17.62 * tdc / (243.12 + tdc)) / Math.exp(17.62 * tc / (243.12 + tc)));
+        hum = Math.max(0, Math.min(100, hum));
+      }
+
+      var dt = new Date(tMs);
+      var entry = {
+        hour: ("0" + dt.getHours()).slice(-2) + ":" + ("0" + dt.getMinutes()).slice(-2),
+        cloud: (c !== null) ? Math.round(c) : null,
+        wind: (w !== null) ? Math.round(w * 3.6 * 10) / 10 : null,
+        precip: null,
+        humidity: hum,
+        seeing: (s !== null) ? Math.round(s * 10) / 10 : null,
+        transparency: (tr !== null) ? Math.round(tr) : null
+      };
+
+      allHours.push(entry);
+      if (duskMs && dawnMs && (tMs >= duskMs && tMs <= dawnMs)) {
+        hourly.push(entry);
+      }
+    }
+
+    if (hourly.length === 0 && allHours.length > 0) {
+      hourly = allHours.slice(0, 12);
+    }
+
     log("trimmed hours=" + hourly.length);
 
     // Step 2: ISS passes (n2yo.com)
     if (!n2yoKey) {
       log("ISS skipped: no n2yoKey in astroclk.json");
       var result2 = {
-        fetchedAt:        Date.now(),
-        provider:         "astrospheric",
-        hourly:           hourly,
-        cloudAtDusk:      hourly.length ? hourly[0].cloud : null,
-        creditsUsedToday: credits,
-        iss:              null
+        fetchedAt: Date.now(),
+        provider: "astrospheric",
+        hourly: hourly,
+        cloudAtDusk: hourly.length ? hourly[0].cloud : null,
+        creditsRemaining: creditsRemaining,
+        creditCost: creditCost,
+        iss: null
       };
       require("Storage").writeJSON("astroclk.weather.json", result2);
       log("DONE (no ISS key)");
@@ -294,17 +350,18 @@ function _fetchAstrospheric(lat, lon, key, n2yoKey, duskMs, dawnMs, onDone, onEr
       var issPass = _findIssPass(issData, duskMs / 1000, dawnMs / 1000);
       if (issPass) {
         var rt = new Date(issPass.risetime * 1000);
-        log("ISS pass=" + rt.toISOString().slice(0,16).replace("T"," ") + " local (" + issPass.duration + "s)");
+        log("ISS pass=" + rt.toISOString().slice(0, 16).replace("T", " ") + " local (" + issPass.duration + "s)");
       } else {
         log("ISS pass=none");
       }
       var result = {
-        fetchedAt:        Date.now(),
-        provider:         "astrospheric",
-        hourly:           hourly,
-        cloudAtDusk:      hourly.length ? hourly[0].cloud : null,
-        creditsUsedToday: credits,
-        iss:              issPass
+        fetchedAt: Date.now(),
+        provider: "astrospheric",
+        hourly: hourly,
+        cloudAtDusk: hourly.length ? hourly[0].cloud : null,
+        creditsRemaining: creditsRemaining,
+        creditCost: creditCost,
+        iss: issPass
       };
       require("Storage").writeJSON("astroclk.weather.json", result);
       log("DONE");
@@ -313,12 +370,13 @@ function _fetchAstrospheric(lat, lon, key, n2yoKey, duskMs, dawnMs, onDone, onEr
       var eStr = (typeof e === "object") ? JSON.stringify(e) : "" + e;
       log("ISS fetch failed: " + eStr);
       var result = {
-        fetchedAt:        Date.now(),
-        provider:         "astrospheric",
-        hourly:           hourly,
-        cloudAtDusk:      hourly.length ? hourly[0].cloud : null,
-        creditsUsedToday: credits,
-        iss:              null
+        fetchedAt: Date.now(),
+        provider: "astrospheric",
+        hourly: hourly,
+        cloudAtDusk: hourly.length ? hourly[0].cloud : null,
+        creditsRemaining: creditsRemaining,
+        creditCost: creditCost,
+        iss: null
       };
       require("Storage").writeJSON("astroclk.weather.json", result);
       log("DONE (no ISS)");
@@ -326,7 +384,7 @@ function _fetchAstrospheric(lat, lon, key, n2yoKey, duskMs, dawnMs, onDone, onEr
     });
   }).catch(function(e) {
     log("ERROR http Astrospheric: " + e);
-    if (onError) onError("Astrospheric fetch failed: " + e);
+    if (onError) onError("Astrospheric: " + e);
   });
 }
 

@@ -127,11 +127,6 @@
                 <input id="astrospheric-key" class="form-input input-sm" type="text" placeholder="64-character hex key">
               </div>
 
-              <div class="form-group" style="margin-bottom: 10px;">
-                <label class="form-label" for="astro-proxy-url"><strong>Astrospheric Proxy URL:</strong></label>
-                <input id="astro-proxy-url" class="form-input input-sm" type="text" placeholder="https://astrowatch-proxy.burton-astrowatch.workers.dev/astro">
-              </div>
-
               <div class="form-group" style="margin-bottom: 15px;">
                 <label class="form-label" for="n2yo-key"><strong>N2YO ISS API Key:</strong></label>
                 <input id="n2yo-key" class="form-input input-sm" type="text" placeholder="N2YO key for satellite passes">
@@ -223,7 +218,6 @@
           currentConfig = cfg || {};
           document.getElementById("provider-select").value = currentConfig.weatherProvider || "astrospheric";
           document.getElementById("astrospheric-key").value = currentConfig.astrosphericKey || "";
-          document.getElementById("astro-proxy-url").value = currentConfig.astroProxyUrl || "";
           document.getElementById("n2yo-key").value = currentConfig.n2yoKey || "";
         });
       }
@@ -231,7 +225,6 @@
       function saveConfig() {
         currentConfig.weatherProvider = document.getElementById("provider-select").value;
         currentConfig.astrosphericKey = document.getElementById("astrospheric-key").value.trim();
-        currentConfig.astroProxyUrl = document.getElementById("astro-proxy-url").value.trim();
         currentConfig.n2yoKey = document.getElementById("n2yo-key").value.trim();
 
         Util.showModal("Saving settings to watch...");
